@@ -1,0 +1,88 @@
+# config/pricing.yaml
+# 模型价格配置 - 通过 vendor + model 与 profiles.yaml 关联
+
+models:
+  # ===== OpenAI =====
+  - vendor: OpenAI
+    model: gpt-4o
+    display_name: GPT-4o
+    pricing_type: fixed
+    input_price_per_million: 2.50
+    output_price_per_million: 10.00
+    last_updated: "2024-12-01"
+  
+  - vendor: OpenAI
+    model: gpt-4o-mini
+    display_name: GPT-4o Mini
+    pricing_type: fixed
+    input_price_per_million: 0.15
+    output_price_per_million: 0.60
+  
+  # ===== DeepSeek =====
+  - vendor: DeepSeek
+    model: deepseek-chat
+    display_name: DeepSeek Chat
+    pricing_type: fixed
+    input_price_per_million: 0.14
+    output_price_per_million: 0.28
+    currency: CNY
+    notes: "输入 ¥1/百万, 输出 ¥2/百万"
+  
+  - vendor: DeepSeek
+    model: deepseek-vl2
+    display_name: DeepSeek VL2
+    pricing_type: fixed
+    input_price_per_million: 0.14
+    output_price_per_million: 0.28
+    currency: CNY
+  
+  # ===== OpenRouter =====
+  - vendor: OpenRouter
+    model: anthropic/claude-sonnet-4-20250514
+    display_name: Claude Sonnet 4 (OpenRouter)
+    pricing_type: fixed
+    input_price_per_million: 3.00
+    output_price_per_million: 15.00
+  
+  - vendor: OpenRouter
+    model: google/gemini-2.0-flash-exp:free
+    display_name: Gemini 2.0 Flash (Free)
+    pricing_type: free
+  
+  # ===== Anthropic =====
+  - vendor: Anthropic
+    model: claude-sonnet-4-20250514
+    display_name: Claude Sonnet 4
+    pricing_type: fixed
+    input_price_per_million: 3.00
+    output_price_per_million: 15.00
+  
+  # ===== Google Gemini =====
+  - vendor: Google
+    model: gemini-2.0-flash
+    display_name: Gemini 2.0 Flash
+    pricing_type: tiered
+    tiers:
+      - min_tokens: 0
+        max_tokens: 128000
+        input_price: 0.075
+        output_price: 0.30
+      - min_tokens: 128000
+        max_tokens: null
+        input_price: 0.15
+        output_price: 0.60
+  
+  # ===== 火山方舟 =====
+  - vendor: 火山方舟
+    model: doubao-vision-pro-32k
+    display_name: 豆包视觉 Pro 32K
+    pricing_type: fixed
+    input_price_per_million: 0.42
+    output_price_per_million: 1.25
+    currency: CNY
+  
+  # ===== 本地部署 =====
+  - vendor: Local
+    model: autoglm-phone-9b
+    display_name: AutoGLM Phone 9B (本地)
+    pricing_type: free
