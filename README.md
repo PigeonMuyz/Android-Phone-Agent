@@ -1,6 +1,6 @@
-# Phone Agent
+# Android Phone Agent
 
-> 支持多 VLM 提供商、多设备并行的 Android 手机自动化智能体
+> 一个支持多 VLM 提供商、多设备并行的 Android 手机自动化智能体框架
 
 ## 功能特点
 

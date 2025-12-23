@@ -49,7 +49,7 @@ profiles:
     description: "Claude Sonnet 4 via OpenRouter"
     extra_headers:
       HTTP-Referer: https://github.com/phone-agent
-      X-Title: Phone-Agent
+      X-Title: Android-Phone-Agent
       
   openrouter_gemini:
     vendor: OpenRouter

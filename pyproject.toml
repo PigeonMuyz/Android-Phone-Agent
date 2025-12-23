@@ -1,7 +1,7 @@
 [project]
-name = "phone-agent"
+name = "android-phone-agent"
 version = "0.1.0"
-description = "Multi-Provider Phone Agent - Android automation with VLM"
+description = "Android Phone Agent - Multi-provider VLM-based phone automation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

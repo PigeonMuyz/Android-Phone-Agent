@@ -44,8 +44,8 @@ class DeviceListItem(ListItem):
 class PhoneAgentApp(App):
     """Phone Agent TUI 应用"""
 
-    TITLE = "Phone Agent"
-    SUB_TITLE = "Multi-Provider Android Automation"
+    TITLE = "Android Phone Agent"
+    SUB_TITLE = "Multi-Provider VLM Automation"
     CSS = """
     Screen {
         layout: grid;
