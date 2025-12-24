@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from rich.console import Console
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, on
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import (
@@ -121,6 +121,7 @@ class PhoneAgentApp(App):
         self._selected_device: DeviceInfo | None = None
         self._current_agent = None  # 当前运行的 Agent
         self._task_running = False
+        self._user_prefs_path = Path(".cache/user_prefs.json")  # 用户偏好文件
         
         # 任务面板
         self._show_current_task = True  # True=当前任务, False=历史
@@ -190,20 +191,75 @@ class PhoneAgentApp(App):
                 self.profile_manager.load_from_yaml(profiles_path)
                 log.write(f"[blue]已加载 {len(self.profile_manager)} 个 Profile[/blue]")
 
-                # 更新下拉选项
-                options = [
-                    (f"{p.vendor}/{p.model}", name)
-                    for name, p in self.profile_manager.get_all_profiles().items()
-                ]
+                # 按 vendor 分组显示
+                all_profiles = self.profile_manager.get_all_profiles()
+                
+                # 按 vendor 分组
+                grouped: dict[str, list[tuple[str, str, str]]] = {}
+                for name, p in all_profiles.items():
+                    vendor = p.vendor
+                    if vendor not in grouped:
+                        grouped[vendor] = []
+                    # 显示名称：description 或 model 名
+                    display = p.description or p.model
+                    if p.is_free:
+                        display += " 🆓"
+                    grouped[vendor].append((name, display, vendor))
+                
+                # 构建选项列表（带 vendor 分隔标题）
+                options = []
+                for vendor in sorted(grouped.keys()):
+                    # 添加 vendor 作为分隔标题（使用特殊前缀标记）
+                    options.append((f"━━ {vendor} ━━", f"__vendor__{vendor}"))
+                    for name, display, _ in grouped[vendor]:
+                        options.append((f"    {display}", name))
+                
                 select.set_options(options)
 
-                # 设置默认选项
-                if self.profile_manager.default_profile_name:
+                # 设置默认选项：优先使用用户上次选择，其次使用配置中的默认值
+                saved_profile = self._load_user_pref("last_profile")
+                valid_profile_names = [val for _, val in options if not str(val).startswith("__vendor__")]
+                if saved_profile and saved_profile in valid_profile_names:
+                    select.value = saved_profile
+                elif self.profile_manager.default_profile_name:
                     select.value = self.profile_manager.default_profile_name
             else:
                 log.write(f"[yellow]Profile 配置文件不存在: {profiles_path}[/yellow]")
         except Exception as e:
             log.write(f"[red]加载 Profile 失败: {e}[/red]")
+
+    def _load_user_pref(self, key: str) -> str | None:
+        """加载用户偏好"""
+        try:
+            if self._user_prefs_path.exists():
+                import json
+                prefs = json.loads(self._user_prefs_path.read_text())
+                return prefs.get(key)
+        except Exception:
+            pass
+        return None
+
+    def _save_user_pref(self, key: str, value: str) -> None:
+        """保存用户偏好"""
+        try:
+            import json
+            self._user_prefs_path.parent.mkdir(parents=True, exist_ok=True)
+            prefs = {}
+            if self._user_prefs_path.exists():
+                prefs = json.loads(self._user_prefs_path.read_text())
+            prefs[key] = value
+            self._user_prefs_path.write_text(json.dumps(prefs, ensure_ascii=False, indent=2))
+        except Exception:
+            pass
+
+    @on(Select.Changed, "#profile-select")
+    def on_profile_select_changed(self, event: Select.Changed) -> None:
+        """当用户选择模型时保存（忽略 vendor 分隔符）"""
+        if event.value and event.value != Select.BLANK:
+            # 忽略 vendor 分隔符
+            if str(event.value).startswith("__vendor__"):
+                return
+            self._save_user_pref("last_profile", str(event.value))
 
     async def _refresh_devices(self) -> None:
         """刷新设备列表"""

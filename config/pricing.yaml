@@ -144,3 +144,77 @@ models:
     currency: CNY
     input_price_per_million: 0.42
     output_price_per_million: 1.25
+
+  # =====================================================
+  # Google - Gemini 3 Pro (预发布版)
+  # 阶梯定价：按 Prompt 长度是否超过 200k 分档
+  # =====================================================
+  - vendor: Google
+    model: gemini-3-pro-preview
+    display_name: Gemini 3 Pro Preview
+    pricing_type: tiered
+    currency: USD
+    notes: |
+      输入<=200k: $2.00/M输入, $12.00/M输出
+      输入>200k: $4.00/M输入, $18.00/M输出
+    tiers:
+      - min_tokens: 0
+        max_tokens: 200000
+        input_price: 2.00
+        output_price: 12.00
+      - min_tokens: 200001
+        max_tokens: null
+        input_price: 4.00
+        output_price: 18.00
+
+  # =====================================================
+  # Google - Gemini 3 Flash (预发布版)
+  # 固定定价
+  # =====================================================
+  - vendor: Google
+    model: gemini-3-flash-preview
+    display_name: Gemini 3 Flash Preview
+    pricing_type: fixed
+    currency: USD
+    input_price_per_million: 0.50
+    output_price_per_million: 3.00
+    notes: |
+      文本/图片/影片输入: $0.50/M
+      输出: $3.00/M
+
+  # =====================================================
+  # Google - Gemini 2.5 Pro
+  # 阶梯定价：按 Prompt 长度是否超过 200k 分档
+  # =====================================================
+  - vendor: Google
+    model: gemini-2.5-pro
+    display_name: Gemini 2.5 Pro
+    pricing_type: tiered
+    currency: USD
+    notes: |
+      输入<=200k: $1.25/M输入, $10.00/M输出
+      输入>200k: $2.50/M输入, $15.00/M输出
+    tiers:
+      - min_tokens: 0
+        max_tokens: 200000
+        input_price: 1.25
+        output_price: 10.00
+      - min_tokens: 200001
+        max_tokens: null
+        input_price: 2.50
+        output_price: 15.00
+
+  # =====================================================
+  # Google - Gemini 2.5 Flash
+  # 固定定价
+  # =====================================================
+  - vendor: Google
+    model: gemini-2.5-flash
+    display_name: Gemini 2.5 Flash
+    pricing_type: fixed
+    currency: USD
+    input_price_per_million: 0.30
+    output_price_per_million: 2.50
+    notes: |
+      文本/图片/影片输入: $0.30/M
+      输出: $2.50/M

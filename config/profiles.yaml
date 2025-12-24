@@ -30,7 +30,7 @@ profiles:
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ${VOLCANO_API_KEY}
     model: deepseek-v3-2-251201
-    description: "DeepSeek V3 via 火山方舟 - 高性能推理"
+    description: "DeepSeek V3.2 251201"
 
   # 豆包 Seed 1.6 - 标准版
   volcano_doubao_seed:
@@ -39,7 +39,7 @@ profiles:
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ${VOLCANO_API_KEY}
     model: doubao-seed-1-6-251015
-    description: "豆包 Seed 1.6 - 通用对话"
+    description: "豆包 1.6 251015"
 
   # 豆包 Seed 1.6 Lite - 轻量版
   volcano_doubao_lite:
@@ -48,13 +48,107 @@ profiles:
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ${VOLCANO_API_KEY}
     model: doubao-seed-1-6-lite-251015
-    description: "豆包 Seed 1.6 Lite - 轻量快速"
+    description: "豆包 1.6 Lite 251015"
 
-  # 豆包视觉模型
-  volcano_doubao_vision:
-    vendor: 火山方舟
+  # ===== Google Gemini =====
+
+  # Gemini 3 Pro Preview (付费)
+  google_gemini_3_pro:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-3-pro-preview
+    description: "Gemini 3 Pro Preview"
+
+  # Gemini 3 Flash Preview (付费)
+  google_gemini_3_flash:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-3-flash-preview
+    description: "Gemini 3 Flash Preview"
+
+  # Gemini 3 Flash Preview (免费)
+  google_gemini_3_flash_free:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-3-flash-preview
+    is_free: true
+    description: "Gemini 3 Flash Preview (免费)"
+
+  # Gemini 2.5 Pro (付费)
+  google_gemini_25_pro:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-2.5-pro
+    description: "Gemini 2.5 Pro"
+
+  # Gemini 2.5 Pro (免费)
+  google_gemini_25_pro_free:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-2.5-pro
+    is_free: true
+    description: "Gemini 2.5 Pro (免费)"
+
+  # Gemini 2.5 Flash (付费)
+  google_gemini_25_flash:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-2.5-flash
+    description: "Gemini 2.5 Flash"
+
+  # Gemini 2.5 Flash (免费)
+  google_gemini_25_flash_free:
+    vendor: Google
+    protocol: google
+    api_key: ${GOOGLE_API_KEY}
+    model: gemini-2.5-flash
+    is_free: true
+    description: "Gemini 2.5 Flash (免费)"
+
+  # ===== ModelScope (OpenAI 兼容) =====
+
+  # GLM-4.7 (智谱AI)
+  modelscope_glm_4_7:
+    vendor: ModelScope
     protocol: openai
-    base_url: https://ark.cn-beijing.volces.com/api/v3
-    api_key: ${VOLCANO_API_KEY}
-    model: doubao-1-5-vision-pro-32k-250115
-    description: "豆包视觉 Pro - 图像理解"
+    base_url: https://api-inference.modelscope.cn/v1
+    api_key: ${MODELSCOPE_API_KEY}
+    model: ZhipuAI/GLM-4.7
+    is_free: true
+    description: "GLM-4.7"
+
+  # MiMo-V2-Flash (小米)
+  modelscope_mimo_v2_flash:
+    vendor: ModelScope
+    protocol: openai
+    base_url: https://api-inference.modelscope.cn/v1
+    api_key: ${MODELSCOPE_API_KEY}
+    model: XiaomiMiMo/MiMo-V2-Flash
+    is_free: true
+    description: "MiMo V2 Flash"
+
+  # AutoGLM-Phone-9B (智谱AI)
+  modelscope_autoglm_phone:
+    vendor: ModelScope
+    protocol: openai
+    base_url: https://api-inference.modelscope.cn/v1
+    api_key: ${MODELSCOPE_API_KEY}
+    model: ZhipuAI/AutoGLM-Phone-9B
+    is_free: true
+    description: "AutoGLM Phone 9B"
+
+  # Qwen3-VL-235B (通义千问)
+  modelscope_qwen3_vl:
+    vendor: ModelScope
+    protocol: openai
+    base_url: https://api-inference.modelscope.cn/v1
+    api_key: ${MODELSCOPE_API_KEY}
+    model: Qwen/Qwen3-VL-235B-A22B-Instruct
+    is_free: true
+    description: "Qwen3 VL 235B"

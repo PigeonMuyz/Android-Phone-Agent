@@ -24,12 +24,14 @@ class ModelProfile(BaseModel):
     api_key: str = Field(description="API Key")
     model: str = Field(description="模型标识")
     description: str | None = Field(default=None, description="描述")
+    is_free: bool = Field(default=False, description="是否为免费版本（不计费）")
     extra_headers: dict[str, str] | None = Field(
         default=None, description="额外请求头"
     )
 
     def __str__(self) -> str:
-        return f"{self.vendor}/{self.model}"
+        free_tag = " (免费)" if self.is_free else ""
+        return f"{self.vendor}/{self.model}{free_tag}"
 
 
 class ProfileManager:

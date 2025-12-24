@@ -242,7 +242,7 @@ class PhoneAgent:
         
         response = self.vlm_client.request(messages_with_context, image=screenshot)
 
-        # 3. 记录费用
+        # 3. 记录费用（免费版也计算，用于展示节省金额）
         step_cost = 0.0
         if self.billing_manager and self.profile:
             record = self.billing_manager.record_usage(
