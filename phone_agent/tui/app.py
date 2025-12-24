@@ -106,6 +106,7 @@ class PhoneAgentApp(App):
     BINDINGS = [
         Binding("q", "quit", "退出"),
         Binding("r", "refresh_devices", "刷新设备"),
+        Binding("escape", "cancel_task", "取消任务"),
         Binding("ctrl+c", "quit", "退出"),
     ]
 
@@ -118,6 +119,8 @@ class PhoneAgentApp(App):
         )
         self.profile_manager = ProfileManager()
         self._selected_device: DeviceInfo | None = None
+        self._current_agent = None  # 当前运行的 Agent
+        self._task_running = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -142,6 +145,7 @@ class PhoneAgentApp(App):
                     id="task-input",
                 )
                 yield Button("执行", id="submit-btn", variant="primary")
+                yield Button("取消", id="cancel-btn", variant="error", disabled=True)
 
         yield Footer()
 
@@ -220,6 +224,8 @@ class PhoneAgentApp(App):
         """按钮点击事件"""
         if event.button.id == "submit-btn":
             await self._execute_task()
+        elif event.button.id == "cancel-btn":
+            await self.action_cancel_task()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """输入提交事件"""
@@ -231,6 +237,8 @@ class PhoneAgentApp(App):
         log = self.query_one("#log-panel", RichLog)
         task_input = self.query_one("#task-input", Input)
         select = self.query_one("#profile-select", Select)
+        submit_btn = self.query_one("#submit-btn", Button)
+        cancel_btn = self.query_one("#cancel-btn", Button)
 
         task = task_input.value.strip()
         if not task:
@@ -252,11 +260,186 @@ class PhoneAgentApp(App):
         log.write(f"🔧 Profile: {profile_name}")
         log.write(f"[bold cyan]{'='*50}[/bold cyan]\n")
 
-        # 实际执行需要在后台线程运行，这里仅演示
-        log.write("[blue]任务已提交...[/blue]")
-        log.write("[dim]（完整执行功能待实现）[/dim]")
-
         task_input.value = ""
+
+        # 设置按钮状态
+        submit_btn.disabled = True
+        cancel_btn.disabled = False
+        self._task_running = True
+
+        # 使用 Textual 的 worker 在后台执行
+        self.run_worker(
+            self._run_agent_worker(task, profile_name),
+            exclusive=True,
+            name="agent_task",
+        )
+
+    async def _run_agent_worker(self, task: str, profile_name: str) -> None:
+        """在后台运行 Agent 任务（worker 版本）"""
+        import queue
+
+        log = self.query_one("#log-panel", RichLog)
+
+        # 获取 Profile
+        profile = self.profile_manager.get_profile(profile_name)
+        if not profile:
+            log.write(f"[red]Profile 不存在: {profile_name}[/red]")
+            self._reset_buttons()
+            return
+
+        log.write(f"[blue]正在初始化...[/blue]")
+
+        # 导入必要模块
+        from phone_agent.adb import ADBDevice
+        from phone_agent.agent import PhoneAgent, AgentConfig, StepResult
+        from phone_agent.prompts import PromptManager
+        from phone_agent.providers import create_vlm_client_from_profile
+        from phone_agent.billing import load_pricing_config
+
+        # 创建设备控制器
+        device = ADBDevice(self._selected_device.device_id)
+        log.write(f"[green]设备已连接[/green]")
+
+        # 创建 VLM 客户端
+        try:
+            vlm_client = create_vlm_client_from_profile(profile)
+            log.write(f"[green]VLM 客户端已创建: {profile.vendor}/{profile.model}[/green]")
+        except Exception as e:
+            log.write(f"[red]创建 VLM 客户端失败: {e}[/red]")
+            self._reset_buttons()
+            return
+
+        # 加载 Prompt 管理器
+        prompt_manager = PromptManager("prompts")
+        prompt_manager.load()
+
+        # 加载计费管理器
+        billing_manager = None
+        if self.settings.billing_enabled:
+            billing_manager = load_pricing_config(self.settings.billing_config_path)
+
+        # 用于线程间通信的队列
+        step_queue = queue.Queue()
+
+        def on_step(result: StepResult):
+            """步骤完成回调"""
+            step_queue.put(result)
+
+        # 创建 Agent 配置
+        config = AgentConfig(
+            max_steps=self.settings.max_steps,
+            action_delay=self.settings.action_delay,
+            pause_on_action=False,
+            verbose=False,
+        )
+
+        # 创建 Agent
+        agent = PhoneAgent(
+            config=config,
+            vlm_client=vlm_client,
+            device=device,
+            prompt_manager=prompt_manager,
+            billing_manager=billing_manager,
+            profile=profile,
+            on_step_callback=on_step,
+        )
+        self._current_agent = agent
+
+        log.write(f"[blue]开始执行任务...[/blue]\n")
+
+        # 在线程池中执行同步的 Agent
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def run_sync():
+            return agent.run(task)
+
+        with ThreadPoolExecutor() as executor:
+            loop = asyncio.get_event_loop()
+            future = loop.run_in_executor(executor, run_sync)
+
+            # 轮询队列更新日志
+            while not future.done():
+                await asyncio.sleep(0.1)
+                
+                # 处理队列中的步骤结果
+                while not step_queue.empty():
+                    try:
+                        result: StepResult = step_queue.get_nowait()
+                        self._display_step_result(log, result)
+                    except queue.Empty:
+                        break
+
+            try:
+                result = future.result()
+                
+                # 处理剩余的队列消息
+                while not step_queue.empty():
+                    try:
+                        step_result = step_queue.get_nowait()
+                        self._display_step_result(log, step_result)
+                    except queue.Empty:
+                        break
+                
+                log.write(f"\n[bold green]{'='*50}[/bold green]")
+                log.write(f"[bold green]✅ 任务完成[/bold green]")
+                log.write(f"[green]{result}[/green]")
+                
+                # 显示计费信息
+                if billing_manager:
+                    summary = billing_manager.get_task_summary()
+                    if summary.step_count > 0:
+                        log.write(f"\n[cyan]💰 成本统计:[/cyan]")
+                        log.write(f"   输入: {summary.total_prompt_tokens:,} tokens")
+                        log.write(f"   输出: {summary.total_completion_tokens:,} tokens")
+                        log.write(f"   总成本: ¥{summary.total_cost:.4f}")
+                        log.write(f"   步骤数: {summary.step_count}")
+                
+                log.write(f"[bold green]{'='*50}[/bold green]\n")
+                
+            except Exception as e:
+                log.write(f"[red]执行错误: {e}[/red]")
+                import traceback
+                log.write(f"[dim]{traceback.format_exc()}[/dim]")
+
+        self._reset_buttons()
+
+    def _display_step_result(self, log: RichLog, result) -> None:
+        """显示步骤结果"""
+        status = "✅" if result.success else "❌"
+        log.write(f"\n[bold cyan]━━━ 步骤 {self._current_agent._step_count if self._current_agent else '?'} {status}━━━[/bold cyan]")
+
+        if result.thinking:
+            # 显示思考过程（最多 200 字符）
+            thinking_preview = result.thinking[:200]
+            if len(result.thinking) > 200:
+                thinking_preview += "..."
+            log.write(f"[yellow]💭 思考:[/yellow] {thinking_preview}")
+
+        if result.action:
+            log.write(f"[blue]🎬 动作:[/blue] {result.action[:100]}...")
+
+        if result.message:
+            log.write(f"[green]📝 结果:[/green] {result.message}")
+
+        if result.step_cost > 0:
+            log.write(f"[dim]💰 成本: ¥{result.step_cost:.4f}[/dim]")
+
+    def _reset_buttons(self) -> None:
+        """重置按钮状态"""
+        submit_btn = self.query_one("#submit-btn", Button)
+        cancel_btn = self.query_one("#cancel-btn", Button)
+        submit_btn.disabled = False
+        cancel_btn.disabled = True
+        self._task_running = False
+        self._current_agent = None
+
+    async def action_cancel_task(self) -> None:
+        """取消当前任务"""
+        if self._current_agent and self._task_running:
+            log = self.query_one("#log-panel", RichLog)
+            log.write("[yellow]⏹️ 正在取消任务...[/yellow]")
+            self._current_agent.cancel()
 
 
 def main() -> None:

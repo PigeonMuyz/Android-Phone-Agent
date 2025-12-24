@@ -76,20 +76,18 @@ class ADBDevice:
         Returns:
             PNG 图像数据
         """
-        # 使用 adbutils 的截图功能
-        png_data = self.device.screenshot()
+        # adbutils 的 screenshot() 返回 PIL Image 对象
+        img = self.device.screenshot()
         
+        # 如果需要缩放
         if scale < 1.0:
-            # 缩放图像
-            img = Image.open(io.BytesIO(png_data))
             new_size = (int(img.width * scale), int(img.height * scale))
             img = img.resize(new_size, Image.Resampling.LANCZOS)
-            
-            buffer = io.BytesIO()
-            img.save(buffer, format="PNG")
-            return buffer.getvalue()
         
-        return png_data
+        # 转换为 bytes
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        return buffer.getvalue()
 
     def screenshot_to_file(self, path: str | Path, scale: float = 1.0) -> Path:
         """截图并保存到文件"""
@@ -264,7 +262,31 @@ class ADBDevice:
     def launch_app(self, package_name: str) -> bool:
         """启动应用"""
         try:
-            # 使用 monkey 启动应用
+            # 方法1: 使用 am start 启动主 Activity
+            result = self.device.shell(
+                f"am start -n $(pm dump {package_name} | grep -A 1 'android.intent.action.MAIN' | grep -oP 'Activity\\.name=\\K[^ ]+' | head -1 || echo '{package_name}/.MainActivity')"
+            )
+            
+            # 如果上面失败，尝试方法2: monkey
+            if "Error" in result or not result.strip():
+                self.device.shell(
+                    f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1 2>/dev/null"
+                )
+            
+            # 方法3: 尝试常见的启动方式
+            # am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p <package>
+            self.device.shell(
+                f"am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER {package_name}"
+            )
+            
+            return True
+        except Exception as e:
+            print(f"启动应用失败: {e}")
+            return False
+
+    def launch_app_simple(self, package_name: str) -> bool:
+        """使用 monkey 简单启动应用"""
+        try:
             self.device.shell(
                 f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
             )

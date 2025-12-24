@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from phone_agent.providers import BaseVLMClient
 
 from .actions import ActionHandler
+
+# 尝试导入 OCR（可选依赖）
+try:
+    from phone_agent.ocr import OCREngine
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
+    OCREngine = None
 
 
 class AgentConfig(BaseModel):
@@ -28,6 +36,7 @@ class AgentConfig(BaseModel):
     verbose: bool = Field(default=True, description="详细输出")
     enable_billing: bool = Field(default=True, description="启用计费")
     pause_on_action: bool = Field(default=False, description="每步后暂停等待用户确认")
+    enable_ocr: bool = Field(default=True, description="启用 OCR 辅助（检测键盘状态等）")
 
 
 class StepResult(BaseModel):
@@ -54,6 +63,7 @@ class PhoneAgent:
         prompt_manager: "PromptManager",
         billing_manager: "BillingManager | None" = None,
         profile: "ModelProfile | None" = None,
+        on_step_callback: "Callable[[StepResult], None] | None" = None,
     ) -> None:
         self.config = config
         self.vlm_client = vlm_client
@@ -61,19 +71,34 @@ class PhoneAgent:
         self.prompt_manager = prompt_manager
         self.billing_manager = billing_manager
         self.profile = profile
+        self.on_step_callback = on_step_callback
 
         self.action_handler = ActionHandler(device)
         self._messages: list[dict] = []
         self._step_count = 0
         self._total_cost = 0.0
+        self._cancelled = False
+        
+        # 初始化 OCR 引擎（可选）
+        self._ocr_engine = None
+        if config.enable_ocr and HAS_OCR:
+            try:
+                self._ocr_engine = OCREngine()
+            except Exception:
+                pass
 
     def reset(self) -> None:
         """重置 Agent 状态"""
         self._messages.clear()
         self._step_count = 0
         self._total_cost = 0.0
+        self._cancelled = False
         if self.billing_manager:
             self.billing_manager.reset()
+
+    def cancel(self) -> None:
+        """取消任务"""
+        self._cancelled = True
 
     def run(self, task: str) -> str:
         """
@@ -108,9 +133,18 @@ class PhoneAgent:
             print("-" * 50)
 
         while self._step_count < self.config.max_steps:
+            # 检查是否被取消
+            if self._cancelled:
+                self._print_billing_summary()
+                return "任务已取消"
+
             result = self._execute_step()
 
             self._total_cost += result.step_cost
+
+            # 调用回调
+            if self.on_step_callback:
+                self.on_step_callback(result)
 
             if self.config.verbose:
                 self._print_step_result(result)
@@ -130,9 +164,25 @@ class PhoneAgent:
 
         # 1. 截图
         screenshot = self.device.screenshot(scale=self.config.screenshot_scale)
+        
+        # 1.5 OCR 分析（可选）
+        ocr_context = ""
+        if self._ocr_engine:
+            try:
+                ocr_context = self._ocr_engine.get_screen_context(screenshot)
+            except Exception:
+                pass
 
-        # 2. 调用 VLM
-        response = self.vlm_client.request(self._messages, image=screenshot)
+        # 2. 调用 VLM（如果有 OCR 上下文，添加到最后一条用户消息）
+        messages_with_context = self._messages.copy()
+        if ocr_context and messages_with_context:
+            # 在请求前添加 OCR 上下文
+            messages_with_context.append({
+                "role": "user",
+                "content": f"[屏幕分析]\n{ocr_context}"
+            })
+        
+        response = self.vlm_client.request(messages_with_context, image=screenshot)
 
         # 3. 记录费用
         step_cost = 0.0

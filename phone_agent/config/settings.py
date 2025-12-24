@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     # Agent 配置
     max_steps: int = Field(default=50, description="单次任务最大步数")
     step_delay: float = Field(default=1.0, description="每步执行后的延迟（秒）")
+    action_delay: float = Field(default=3.0, description="动作执行后等待 UI 响应的时间（秒）")
+    pause_on_action: bool = Field(default=False, description="每步后暂停等待用户确认")
     screenshot_scale: float = Field(default=0.5, description="截图缩放比例")
 
 
