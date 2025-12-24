@@ -106,6 +106,7 @@ class PhoneAgentApp(App):
     BINDINGS = [
         Binding("q", "quit", "退出"),
         Binding("r", "refresh_devices", "刷新设备"),
+        Binding("s", "open_settings", "设置"),
         Binding("escape", "cancel_task", "取消任务"),
         Binding("ctrl+c", "quit", "退出"),
     ]
@@ -148,6 +149,9 @@ class PhoneAgentApp(App):
                     yield Button("当前任务", id="show-current-btn", variant="primary")
                     yield Button("历史", id="show-history-btn", variant="default")
                 yield Static("", id="task-status-content", classes="task-content")
+            
+            # 设置按钮
+            yield Button("⚙️ 设置", id="settings-btn", variant="default")
 
         with Container(id="main-panel"):
             yield Static("📋 任务日志", classes="section-title")
@@ -251,6 +255,8 @@ class PhoneAgentApp(App):
             self._show_current_task = False
             self._update_task_panel_buttons()
             self._update_task_panel()
+        elif event.button.id == "settings-btn":
+            await self.action_open_settings()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """输入提交事件"""
@@ -506,6 +512,11 @@ class PhoneAgentApp(App):
             self._current_agent.pause()
             pause_btn.label = "继续"
             log.write("[yellow]⏸️ 任务已暂停 - 可手动操作手机，完成后点击「继续」[/yellow]")
+
+    async def action_open_settings(self) -> None:
+        """打开设置界面"""
+        from phone_agent.tui.screens.settings import SettingsScreen
+        self.push_screen(SettingsScreen())
 
     def _update_task_panel_buttons(self) -> None:
         """更新任务面板按钮样式"""
