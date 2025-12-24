@@ -333,7 +333,7 @@ class PhoneAgentApp(App):
 
         # 导入必要模块
         from phone_agent.adb import ADBDevice
-        from phone_agent.agent import PhoneAgent, AgentConfig, StepResult
+        from phone_agent.agent import PhoneAgent, AgentConfig, StepResult, ProgressUpdate
         from phone_agent.prompts import PromptManager
         from phone_agent.providers import create_vlm_client_from_profile
         from phone_agent.billing import load_pricing_config
@@ -362,10 +362,15 @@ class PhoneAgentApp(App):
 
         # 用于线程间通信的队列
         step_queue = queue.Queue()
+        progress_queue = queue.Queue()
 
         def on_step(result: StepResult):
             """步骤完成回调"""
             step_queue.put(result)
+
+        def on_progress(update: ProgressUpdate):
+            """实时进度回调"""
+            progress_queue.put(update)
 
         # 创建 Agent 配置
         config = AgentConfig(
@@ -384,6 +389,7 @@ class PhoneAgentApp(App):
             billing_manager=billing_manager,
             profile=profile,
             on_step_callback=on_step,
+            on_progress_callback=on_progress,
         )
         self._current_agent = agent
 
@@ -403,6 +409,14 @@ class PhoneAgentApp(App):
             # 轮询队列更新日志
             while not future.done():
                 await asyncio.sleep(0.1)
+                
+                # 先处理进度更新（实时显示思考/动作）
+                while not progress_queue.empty():
+                    try:
+                        progress: ProgressUpdate = progress_queue.get_nowait()
+                        self._display_progress(log, progress)
+                    except queue.Empty:
+                        break
                 
                 # 处理队列中的步骤结果
                 while not step_queue.empty():
@@ -473,28 +487,34 @@ class PhoneAgentApp(App):
             return f"错误：{error}"
 
     def _display_step_result(self, log: RichLog, result) -> None:
-        """显示步骤结果"""
+        """显示步骤结果（成本和完成标记）"""
+        # 进度已通过 on_progress_callback 实时显示，这里只显示完成状态和成本
         status = "✅" if result.success else "❌"
-        log.write(f"\n[bold cyan]━━━ 步骤 {self._current_agent._step_count if self._current_agent else '?'} {status}━━━[/bold cyan]")
-
-        if result.thinking:
-            # 显示思考过程（最多 200 字符）
-            thinking_preview = result.thinking[:200]
-            if len(result.thinking) > 200:
-                thinking_preview += "..."
-            log.write(f"[yellow]💭 思考:[/yellow] {thinking_preview}")
-
-        if result.action:
-            log.write(f"[blue]🎬 动作:[/blue] {result.action[:100]}...")
-
-        if result.message:
-            log.write(f"[green]📝 结果:[/green] {result.message}")
+        log.write(f"[dim]━━━ 步骤完成 {status} ━━━[/dim]")
 
         if result.step_cost > 0:
             log.write(f"[dim]💰 成本: ¥{result.step_cost:.4f}[/dim]")
             # 更新任务面板成本
             self._current_task_info["cost"] += result.step_cost
             self._update_task_panel()
+
+    def _display_progress(self, log: RichLog, progress) -> None:
+        """显示实时进度（思考/动作/等待）"""
+        if progress.phase == "thinking":
+            # 显示步骤头和思考
+            log.write(f"\n[bold cyan]━━━ 步骤 {progress.step} ━━━[/bold cyan]")
+            if progress.thinking:
+                thinking_preview = progress.thinking[:200]
+                if len(progress.thinking) > 200:
+                    thinking_preview += "..."
+                log.write(f"[yellow]💭 思考:[/yellow] {thinking_preview}")
+            if progress.action:
+                log.write(f"[blue]🎬 动作:[/blue] {progress.action[:100]}...")
+        elif progress.phase == "action":
+            if progress.message:
+                log.write(f"[green]📝 结果:[/green] {progress.message}")
+        elif progress.phase == "waiting":
+            log.write(f"[dim]⏳ {progress.message}[/dim]")
 
     def _reset_buttons(self) -> None:
         """重置按钮状态"""
@@ -532,6 +552,10 @@ class PhoneAgentApp(App):
             log = self.query_one("#log-panel", RichLog)
             log.write("[yellow]⏹️ 正在取消任务...[/yellow]")
             self._current_agent.cancel()
+            
+            # 立即重置 UI 状态，不等待后台任务完成
+            self._reset_buttons()
+            log.write("[yellow]任务已取消（后台请求可能仍在完成中）[/yellow]")
 
     async def action_toggle_pause(self) -> None:
         """暂停/恢复任务"""

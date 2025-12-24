@@ -56,6 +56,29 @@ class StepResult(BaseModel):
     completion_tokens: int = 0
 
 
+class ProgressUpdate(BaseModel):
+    """进度更新"""
+    step: int
+    phase: str  # "thinking", "action", "waiting", "done"
+    thinking: str = ""
+    action: str = ""
+    message: str = ""
+
+
+class SubTask(BaseModel):
+    """子任务"""
+    id: int
+    name: str
+    status: str = "pending"  # pending, in_progress, completed
+
+
+class TaskPlan(BaseModel):
+    """任务计划"""
+    tasks: list[SubTask] = []
+    current_task_id: int | None = None
+    phase: str = "init"  # init, plan, execute, finish
+
+
 class PhoneAgent:
     """手机自动化智能体核心"""
 
@@ -68,6 +91,7 @@ class PhoneAgent:
         billing_manager: "BillingManager | None" = None,
         profile: "ModelProfile | None" = None,
         on_step_callback: "Callable[[StepResult], None] | None" = None,
+        on_progress_callback: "Callable[[ProgressUpdate], None] | None" = None,
     ) -> None:
         self.config = config
         self.vlm_client = vlm_client
@@ -76,6 +100,7 @@ class PhoneAgent:
         self.billing_manager = billing_manager
         self.profile = profile
         self.on_step_callback = on_step_callback
+        self.on_progress_callback = on_progress_callback
 
         self.action_handler = ActionHandler(device)
         self._messages: list[dict] = []
@@ -98,6 +123,7 @@ class PhoneAgent:
         self._total_cost = 0.0
         self._cancelled = False
         self._paused = False
+        self._task_plan = TaskPlan()  # 任务计划
         if self.billing_manager:
             self.billing_manager.reset()
 
@@ -227,16 +253,111 @@ class PhoneAgent:
             )
             step_cost = record.total_cost
 
-        # 4. 解析动作
+        # 4. 解析动作和任务阶段
+        import json
+        import re
+        
         thinking = response.thinking
         action = response.action
+        raw_content = response.raw_content
+        
+        # 尝试解析任务阶段信息
+        try:
+            # 尝试从原始内容中提取完整 JSON
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', raw_content, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                
+                # 处理 plan 阶段
+                if parsed.get("phase") == "plan" and "tasks" in parsed:
+                    self._task_plan.phase = "plan"
+                    self._task_plan.tasks = [
+                        SubTask(id=t["id"], name=t["name"], status=t.get("status", "pending"))
+                        for t in parsed["tasks"]
+                    ]
+                    if self._task_plan.tasks:
+                        self._task_plan.current_task_id = self._task_plan.tasks[0].id
+                        self._task_plan.phase = "execute"
+                    
+                    if self.config.verbose:
+                        print(f"📋 任务规划完成，共 {len(self._task_plan.tasks)} 个子任务")
+                    
+                # 处理 task_completed 标记
+                if "task_completed" in parsed:
+                    completed_id = parsed["task_completed"]
+                    for task in self._task_plan.tasks:
+                        if task.id == completed_id:
+                            task.status = "completed"
+                            if self.config.verbose:
+                                print(f"✅ 子任务 {completed_id} 完成: {task.name}")
+                            break
+                
+                # 更新当前任务 ID
+                if "current_task_id" in parsed:
+                    self._task_plan.current_task_id = parsed["current_task_id"]
+                    # 标记为进行中
+                    for task in self._task_plan.tasks:
+                        if task.id == self._task_plan.current_task_id:
+                            task.status = "in_progress"
+                            break
+                
+        except Exception:
+            pass
 
-        # 5. 执行动作
-        action_result = self.action_handler.execute(action)
+        # 4.5 发送思考阶段进度
+        if self.on_progress_callback:
+            self.on_progress_callback(ProgressUpdate(
+                step=self._step_count,
+                phase="thinking",
+                thinking=thinking,
+                action=action or "(规划中...)",
+            ))
+
+        # 4.6 检查是否是规划阶段（无需执行动作）
+        is_plan_phase = False
+        try:
+            if raw_content:
+                json_match = re.search(r'"phase"\s*:\s*"plan"', raw_content)
+                if json_match and not action:
+                    is_plan_phase = True
+        except Exception:
+            pass
+
+        if is_plan_phase:
+            # 规划阶段不执行动作，返回成功继续下一步
+            from .actions import ActionResult
+            action_result = ActionResult(success=True, should_finish=False, message="任务规划完成")
+            
+            if self.on_progress_callback:
+                self.on_progress_callback(ProgressUpdate(
+                    step=self._step_count,
+                    phase="action",
+                    action="Plan",
+                    message=f"规划了 {len(self._task_plan.tasks)} 个子任务",
+                ))
+        else:
+            # 5. 执行动作
+            action_result = self.action_handler.execute(action)
+        
+        # 5.5 发送动作结果进度
+        if self.on_progress_callback:
+            self.on_progress_callback(ProgressUpdate(
+                step=self._step_count,
+                phase="action",
+                action=action,
+                message=action_result.message or "",
+            ))
 
         # 6. 动作执行后等待 (等待 UI 响应)
         if action_result.success and not action_result.should_finish:
             if self.config.action_delay > 0:
+                # 发送等待进度
+                if self.on_progress_callback:
+                    self.on_progress_callback(ProgressUpdate(
+                        step=self._step_count,
+                        phase="waiting",
+                        message=f"等待 UI 响应 ({self.config.action_delay}s)...",
+                    ))
                 if self.config.verbose:
                     print(f"⏳ 等待 UI 响应 ({self.config.action_delay}s)...")
                 time.sleep(self.config.action_delay)
@@ -258,10 +379,24 @@ class PhoneAgent:
         })
 
         if not action_result.should_finish:
-            # 添加执行结果作为用户反馈
+            # 添加执行结果作为用户反馈（包含任务进度）
             feedback = f"动作执行{'成功' if action_result.success else '失败'}"
             if action_result.message:
                 feedback += f": {action_result.message}"
+            
+            # 添加任务进度信息
+            if self._task_plan.tasks:
+                completed = sum(1 for t in self._task_plan.tasks if t.status == "completed")
+                total = len(self._task_plan.tasks)
+                current_task = None
+                for t in self._task_plan.tasks:
+                    if t.id == self._task_plan.current_task_id:
+                        current_task = t
+                        break
+                feedback += f"\n[任务进度: {completed}/{total}]"
+                if current_task:
+                    feedback += f" 当前: {current_task.name}"
+            
             self._messages.append({"role": "user", "content": feedback})
 
         return StepResult(
@@ -403,18 +538,32 @@ class PhoneAgent:
         # 构建更详细的摘要
         summary_parts = []
         
-        if completed_tasks:
-            summary_parts.append(f"【已完成的任务】\n" + "\n".join([f"✅ {t}" for t in completed_tasks]))
+        # 首先添加任务计划状态（关键！）
+        if self._task_plan.tasks:
+            pending_tasks = [t for t in self._task_plan.tasks if t.status != "completed"]
+            completed_task_names = [t for t in self._task_plan.tasks if t.status == "completed"]
+            
+            if completed_task_names:
+                summary_parts.append("【已完成的子任务】\n" + "\n".join([f"✅ {t.name}" for t in completed_task_names]))
+            
+            if pending_tasks:
+                summary_parts.append("【待完成的子任务】⚠️ 重要！\n" + "\n".join([f"⏳ {t.id}. {t.name}" for t in pending_tasks]))
         
         if completed_actions:
-            # 保留最多 15 个关键动作
-            recent_actions = completed_actions[-15:]
-            summary_parts.append(f"【执行的操作（第1-{self._step_count - 2}步）】\n" + "\n".join([f"• {a}" for a in recent_actions]))
+            # 保留最多 10 个关键动作
+            recent_actions = completed_actions[-10:]
+            summary_parts.append(f"【最近执行的操作】\n" + "\n".join([f"• {a}" for a in recent_actions]))
+        
+        # 构建摘要内容
+        if self._task_plan.tasks:
+            pending = [t for t in self._task_plan.tasks if t.status != "completed"]
+            pending_info = f"\n\n🎯 还有 {len(pending)} 个子任务未完成，继续执行！" if pending else "\n\n✅ 所有子任务已完成，请调用 finish。"
+        else:
+            pending_info = ""
         
         summary_content = f"""[历史摘要]
 {chr(10).join(summary_parts)}
-
-⚠️ 注意：以上任务已完成，不要重复执行！请根据当前屏幕状态继续下一步。
+{pending_info}
 (已压缩 {len(history_msgs)} 条历史消息)"""
 
         # 重建消息列表

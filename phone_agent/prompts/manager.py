@@ -74,8 +74,14 @@ class PromptManager:
         if not system_dir.exists():
             return
 
-        for prompt_file in system_dir.glob("*.md"):
+        # 先加载 default 版本
+        for prompt_file in system_dir.glob("default_*.md"):
             lang = prompt_file.stem.replace("default_", "")
+            self._system_prompts[lang] = prompt_file.read_text(encoding="utf-8")
+        
+        # 再加载 task_based 版本（会覆盖 default）
+        for prompt_file in system_dir.glob("task_based_*.md"):
+            lang = prompt_file.stem.replace("task_based_", "")
             self._system_prompts[lang] = prompt_file.read_text(encoding="utf-8")
 
     def _load_app_prompts(self) -> None:
