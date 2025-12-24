@@ -107,7 +107,6 @@ class PhoneAgentApp(App):
         Binding("q", "quit", "退出"),
         Binding("r", "refresh_devices", "刷新设备"),
         Binding("s", "open_settings", "设置"),
-        Binding("escape", "cancel_task", "取消任务"),
         Binding("ctrl+c", "quit", "退出"),
     ]
 
@@ -299,6 +298,10 @@ class PhoneAgentApp(App):
         pause_btn = self.query_one("#pause-btn", Button)
         pause_btn.disabled = False
         self._task_running = True
+        
+        # 任务进行时添加取消任务绑定
+        self.bind("escape", "cancel_task", description="取消任务")
+        self.refresh_bindings()
 
         # 记录任务信息
         import time as time_module
@@ -437,11 +440,37 @@ class PhoneAgentApp(App):
                 log.write(f"[bold green]{'='*50}[/bold green]\n")
                 
             except Exception as e:
-                log.write(f"[red]执行错误: {e}[/red]")
-                import traceback
-                log.write(f"[dim]{traceback.format_exc()}[/dim]")
+                error_msg = self._simplify_error(str(e))
+                log.write(f"[red]❌ {error_msg}[/red]")
 
         self._reset_buttons()
+
+    def _simplify_error(self, error: str) -> str:
+        """将错误信息简化为友好提示"""
+        error_lower = error.lower()
+        
+        # 常见错误映射
+        if "model do not support image input" in error_lower or "image input" in error_lower:
+            return "错误：当前模型不支持图片输入，请切换到视觉模型（如 doubao-vision）"
+        elif "api key" in error_lower or "authentication" in error_lower or "unauthorized" in error_lower:
+            return "错误：API Key 无效或未配置，请在设置中检查 API Key"
+        elif "rate limit" in error_lower:
+            return "错误：请求过于频繁，已触发限流，请稍后再试"
+        elif "timeout" in error_lower:
+            return "错误：请求超时，请检查网络连接"
+        elif "connection" in error_lower:
+            return "错误：网络连接失败，请检查网络"
+        elif "quota" in error_lower or "insufficient" in error_lower:
+            return "错误：账户余额不足或配额已用完"
+        elif "invalid" in error_lower and "model" in error_lower:
+            return "错误：模型名称无效，请检查 Profile 配置"
+        elif "base_url" in error_lower or "endpoint" in error_lower:
+            return "错误：API 地址无效，请检查 Profile 中的 Base URL 配置"
+        else:
+            # 截取错误消息的关键部分
+            if len(error) > 100:
+                return f"错误：{error[:100]}..."
+            return f"错误：{error}"
 
     def _display_step_result(self, log: RichLog, result) -> None:
         """显示步骤结果"""
@@ -488,6 +517,14 @@ class PhoneAgentApp(App):
         self._current_agent = None
         self._current_task_info = {"name": "", "cost": 0.0, "time": 0}
         self._update_task_panel()
+        
+        # 移除取消任务绑定
+        try:
+            # 移除动态绑定的 escape
+            self._bindings.key_to_bindings.pop("escape", None)
+            self.refresh_bindings()
+        except Exception:
+            pass
 
     async def action_cancel_task(self) -> None:
         """取消当前任务"""

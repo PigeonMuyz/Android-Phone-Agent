@@ -344,40 +344,78 @@ class PhoneAgent:
         if self.config.verbose:
             print("📝 正在压缩历史上下文...")
 
-        # 保留系统 Prompt 和最后两条消息
+        # 保留系统 Prompt 和最后 4 条消息（保留更多上下文）
         system_msg = self._messages[0] if self._messages[0]["role"] == "system" else None
-        recent_msgs = self._messages[-2:]  # 保留最近 2 条
+        recent_msgs = self._messages[-4:]  # 保留最近 4 条
 
         # 提取中间的历史消息
         if system_msg:
-            history_msgs = self._messages[1:-2]
+            history_msgs = self._messages[1:-4]
         else:
-            history_msgs = self._messages[:-2]
+            history_msgs = self._messages[:-4]
 
         if not history_msgs:
             return
 
-        # 简单的摘要：提取每条消息的关键信息
-        summary_lines = []
-        for msg in history_msgs:
+        # 改进的摘要：提取具体的动作、结果和关键信息
+        import json
+        import re
+        
+        completed_actions = []
+        completed_tasks = []
+        
+        for i, msg in enumerate(history_msgs):
             role = msg.get("role", "")
             content = msg.get("content", "")
             
             if role == "assistant":
-                # 尝试提取 action 和 thinking
-                if "action" in content.lower():
-                    # 只保留关键部分
-                    summary_lines.append(f"- 执行了操作")
-                else:
-                    summary_lines.append(f"- AI: {content[:50]}...")
+                # 尝试提取 JSON 中的具体动作
+                try:
+                    # 尝试提取 JSON
+                    json_match = re.search(r'\{[^{}]*"action"\s*:\s*"([^"]+)"[^{}]*\}', content, re.DOTALL)
+                    if json_match:
+                        action_type = json_match.group(1)
+                        
+                        # 提取 thinking
+                        thinking_match = re.search(r'"thinking"\s*:\s*"([^"]{0,100})', content)
+                        thinking = thinking_match.group(1) if thinking_match else ""
+                        
+                        if action_type.lower() == "finish":
+                            # 记录任务完成
+                            msg_match = re.search(r'"message"\s*:\s*"([^"]+)"', content)
+                            if msg_match:
+                                completed_tasks.append(msg_match.group(1)[:50])
+                        else:
+                            completed_actions.append(f"{action_type}: {thinking[:40]}...")
+                except Exception:
+                    pass
+                    
             elif role == "user":
-                if "屏幕分析" not in content:
-                    summary_lines.append(f"- 用户/系统: {content[:30]}...")
+                # 检查是否包含成功/失败反馈
+                if "动作执行成功" in content:
+                    # 提取动作结果
+                    if len(completed_actions) > 0:
+                        completed_actions[-1] = completed_actions[-1].rstrip("...") + " ✓"
+                elif "动作执行失败" in content:
+                    if len(completed_actions) > 0:
+                        completed_actions[-1] = completed_actions[-1].rstrip("...") + " ✗"
 
-        # 构建摘要消息
-        summary_content = f"""[历史摘要 - 第1-{self._step_count - len(recent_msgs)//2}步]
-{chr(10).join(summary_lines[:10])}
-(已压缩 {len(history_msgs)} 条历史消息以节省 token)"""
+        # 构建更详细的摘要
+        summary_parts = []
+        
+        if completed_tasks:
+            summary_parts.append(f"【已完成的任务】\n" + "\n".join([f"✅ {t}" for t in completed_tasks]))
+        
+        if completed_actions:
+            # 保留最多 15 个关键动作
+            recent_actions = completed_actions[-15:]
+            summary_parts.append(f"【执行的操作（第1-{self._step_count - 2}步）】\n" + "\n".join([f"• {a}" for a in recent_actions]))
+        
+        summary_content = f"""[历史摘要]
+{chr(10).join(summary_parts)}
+
+⚠️ 注意：以上任务已完成，不要重复执行！请根据当前屏幕状态继续下一步。
+(已压缩 {len(history_msgs)} 条历史消息)"""
 
         # 重建消息列表
         self._messages = []

@@ -30,6 +30,7 @@ class SettingsScreen(Screen):
     BINDINGS = [
         Binding("escape", "go_back", "返回"),
         Binding("ctrl+s", "save_all", "保存"),
+        Binding("q", "quit_app", "退出"),
     ]
 
     CSS = """
@@ -218,8 +219,9 @@ class SettingsScreen(Screen):
                         yield Input(id="setting-summarize-interval", classes="form-input", value="5")
 
         with Horizontal(id="action-bar"):
-            yield Button("💾 保存", id="btn-save", variant="primary")
             yield Button("↩️ 返回", id="btn-back", variant="default")
+            yield Button("💾 保存", id="btn-save", variant="primary")
+            yield Button("🚪 退出", id="btn-quit", variant="error")
         
         yield Footer()
 
@@ -307,6 +309,8 @@ class SettingsScreen(Screen):
             await self._save_all()
         elif event.button.id == "btn-back":
             self.app.pop_screen()
+        elif event.button.id == "btn-quit":
+            self.app.exit()
         elif event.button.id == "btn-add-profile":
             self._clear_profile_form()
             self._selected_profile = None
@@ -501,3 +505,7 @@ class SettingsScreen(Screen):
     async def action_save_all(self) -> None:
         """保存所有配置"""
         await self._save_all()
+
+    def action_quit_app(self) -> None:
+        """退出应用"""
+        self.app.exit()

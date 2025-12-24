@@ -50,10 +50,11 @@
 {"action": "Home", "params": {}}
 ```
 
-### 7. Wait - 等待
+### 7. Wait - 等待页面加载或动画
 ```json
-{"action": "Wait", "params": {"seconds": 2}}
+{"action": "Wait", "params": {"seconds": 5}}
 ```
+- `seconds`: 等待秒数，范围 5-30 秒，用于等待页面加载、动画完成等
 
 ### 8. finish - 任务完成
 ```json

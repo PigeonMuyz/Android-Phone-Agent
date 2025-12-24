@@ -105,6 +105,13 @@ class ActionHandler:
         """处理点击"""
         element = params.get("element", [500, 500])
         x, y = self._get_coords(element)
+        
+        # 检查是否是长按
+        if params.get("long_press", False):
+            duration = params.get("duration", 1000)  # 默认 1 秒
+            if self.device.long_press(x, y, duration):
+                return ActionResult(True, False, f"长按 ({x}, {y}) {duration}ms")
+            return ActionResult(False, False, "长按失败")
 
         if self.device.tap(x, y):
             return ActionResult(True, False, f"点击 ({x}, {y})")
@@ -181,7 +188,9 @@ class ActionHandler:
 
     def _handle_wait(self, params: dict) -> ActionResult:
         """处理等待"""
-        seconds = params.get("seconds", 1)
+        seconds = params.get("seconds", 5)  # 默认 5 秒
+        # 限制在 1-30 秒范围
+        seconds = max(1, min(30, seconds))
         import time
         time.sleep(seconds)
         return ActionResult(True, False, f"等待 {seconds} 秒")
