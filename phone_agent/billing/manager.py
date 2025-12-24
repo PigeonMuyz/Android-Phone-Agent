@@ -65,6 +65,9 @@ class BillingManager:
         if pricing.pricing_type == PricingType.TIERED:
             return self._calculate_tiered_cost(pricing, prompt_tokens, completion_tokens)
 
+        if pricing.pricing_type == PricingType.TIERED_COMPLEX:
+            return self._calculate_complex_tiered_cost(pricing, prompt_tokens, completion_tokens)
+
         return 0.0, 0.0, 0.0
 
     def _calculate_fixed_cost(
@@ -114,6 +117,55 @@ class BillingManager:
             if completion_in_tier > 0:
                 output_cost += (completion_in_tier / 1_000_000) * tier.output_price
                 remaining_completion -= completion_in_tier
+
+        return input_cost, output_cost, input_cost + output_cost
+
+    def _calculate_complex_tiered_cost(
+        self,
+        pricing: ModelPricing,
+        prompt_tokens: int,
+        completion_tokens: int,
+    ) -> tuple[float, float, float]:
+        """
+        计算复杂阶梯价格成本（按输入+输出组合分档）
+        
+        适用于豆包等模型：
+        - 输入<=32k, 输出<=200: 特殊价格
+        - 输入<=32k, 输出>200: 另一价格
+        - 32k<输入<=128k: 另一档位
+        - 输入>128k: 最高档位
+        """
+        if not pricing.complex_tiers:
+            # 没有复杂阶梯配置，回退到简单阶梯
+            if pricing.tiers:
+                return self._calculate_tiered_cost(pricing, prompt_tokens, completion_tokens)
+            return 0.0, 0.0, 0.0
+
+        # 找到匹配的档位
+        matched_tier = None
+        for tier in pricing.complex_tiers:
+            # 检查输入条件
+            input_match = tier.input_min <= prompt_tokens
+            if tier.input_max is not None:
+                input_match = input_match and prompt_tokens <= tier.input_max
+            
+            # 检查输出条件（如果有）
+            output_match = True
+            if tier.output_min is not None:
+                output_match = completion_tokens >= tier.output_min
+            if tier.output_max is not None:
+                output_match = output_match and completion_tokens <= tier.output_max
+            
+            if input_match and output_match:
+                matched_tier = tier
+                break
+        
+        if matched_tier is None:
+            # 没有匹配的档位，使用最后一个档位
+            matched_tier = pricing.complex_tiers[-1]
+
+        input_cost = (prompt_tokens / 1_000_000) * matched_tier.input_price
+        output_cost = (completion_tokens / 1_000_000) * matched_tier.output_price
 
         return input_cost, output_cost, input_cost + output_cost
 

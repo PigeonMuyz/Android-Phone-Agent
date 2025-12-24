@@ -1,95 +1,60 @@
 # config/profiles.yaml
 # Profile 配置 - 定义所有可用的模型 Profile
 # API Keys 通过 ${ENV_VAR} 语法引用 .env 中的变量
+#
+# =====================================================
+# Profile 配置示例:
+# =====================================================
+#
+# profile_name:
+#   vendor: 供应商名称     # 用于计费查找
+#   protocol: openai      # 协议类型: openai, anthropic, google
+#   base_url: https://api.example.com/v1
+#   api_key: ${ENV_VAR_NAME}
+#   model: model-name
+#   description: "描述信息"
+#   extra_headers:        # 可选: 额外请求头
+#     X-Custom: value
+#
+# =====================================================
 
-default_profile: deepseek
+default_profile: volcano_deepseek_v3
 
 profiles:
-  # ===== OpenAI 官方 =====
-  openai_gpt4o:
-    vendor: OpenAI
-    protocol: openai
-    base_url: https://api.openai.com/v1
-    api_key: ${OPENAI_API_KEY}
-    model: gpt-4o
-    description: "OpenAI GPT-4o - 高性能多模态"
-    
-  openai_mini:
-    vendor: OpenAI
-    protocol: openai
-    base_url: https://api.openai.com/v1
-    api_key: ${OPENAI_API_KEY}
-    model: gpt-4o-mini
-    description: "OpenAI GPT-4o Mini - 性价比之选"
+  # ===== 火山方舟 (Volcano) =====
   
-  # ===== DeepSeek =====
-  deepseek:
-    vendor: DeepSeek
-    protocol: openai
-    base_url: https://api.deepseek.com
-    api_key: ${DEEPSEEK_API_KEY}
-    model: deepseek-chat
-    description: "DeepSeek Chat - 国产高性价比"
-    
-  deepseek_vl2:
-    vendor: DeepSeek
-    protocol: openai
-    base_url: https://api.deepseek.com
-    api_key: ${DEEPSEEK_API_KEY}
-    model: deepseek-vl2
-    description: "DeepSeek VL2 - 视觉理解模型"
-  
-  # ===== OpenRouter 聚合 =====
-  openrouter_claude:
-    vendor: OpenRouter
-    protocol: openai
-    base_url: https://openrouter.ai/api/v1
-    api_key: ${OPENROUTER_API_KEY}
-    model: anthropic/claude-sonnet-4-20250514
-    description: "Claude Sonnet 4 via OpenRouter"
-    extra_headers:
-      HTTP-Referer: https://github.com/phone-agent
-      X-Title: Android-Phone-Agent
-      
-  openrouter_gemini:
-    vendor: OpenRouter
-    protocol: openai
-    base_url: https://openrouter.ai/api/v1
-    api_key: ${OPENROUTER_API_KEY}
-    model: google/gemini-2.0-flash-exp:free
-    description: "Gemini 2.0 Flash 免费版 via OpenRouter"
-  
-  # ===== Anthropic 官方 =====
-  anthropic_claude:
-    vendor: Anthropic
-    protocol: anthropic
-    base_url: https://api.anthropic.com
-    api_key: ${ANTHROPIC_API_KEY}
-    model: claude-sonnet-4-20250514
-    description: "Claude Sonnet 4 - 直连官方"
-  
-  # ===== Google Gemini =====
-  gemini_flash:
-    vendor: Google
-    protocol: google
-    api_key: ${GOOGLE_API_KEY}
-    model: gemini-2.0-flash
-    description: "Gemini 2.0 Flash - 快速响应"
-  
-  # ===== 火山方舟 =====
-  volcano_doubao:
+  # DeepSeek V3 - 火山方舟托管版
+  volcano_deepseek_v3:
     vendor: 火山方舟
     protocol: openai
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ${VOLCANO_API_KEY}
-    model: ep-xxxxx
-    description: "豆包视觉模型"
-  
-  # ===== 本地部署 =====
-  local_vllm:
-    vendor: Local
+    model: deepseek-v3-2-251201
+    description: "DeepSeek V3 via 火山方舟 - 高性能推理"
+
+  # 豆包 Seed 1.6 - 标准版
+  volcano_doubao_seed:
+    vendor: 火山方舟
     protocol: openai
-    base_url: http://localhost:8000/v1
-    api_key: not-needed
-    model: autoglm-phone-9b
-    description: "本地 vLLM 部署"
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key: ${VOLCANO_API_KEY}
+    model: doubao-seed-1-6-251015
+    description: "豆包 Seed 1.6 - 通用对话"
+
+  # 豆包 Seed 1.6 Lite - 轻量版
+  volcano_doubao_lite:
+    vendor: 火山方舟
+    protocol: openai
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key: ${VOLCANO_API_KEY}
+    model: doubao-seed-1-6-lite-251015
+    description: "豆包 Seed 1.6 Lite - 轻量快速"
+
+  # 豆包视觉模型
+  volcano_doubao_vision:
+    vendor: 火山方舟
+    protocol: openai
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key: ${VOLCANO_API_KEY}
+    model: doubao-1-5-vision-pro-32k-250115
+    description: "豆包视觉 Pro - 图像理解"

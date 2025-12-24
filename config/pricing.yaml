@@ -1,88 +1,146 @@
 # config/pricing.yaml
 # 模型价格配置 - 通过 vendor + model 与 profiles.yaml 关联
+#
+# =====================================================
+# 计费类型说明:
+# =====================================================
+#
+# fixed - 固定价格
+#   input_price_per_million: 输入价格 (/百万tokens)
+#   output_price_per_million: 输出价格 (/百万tokens)
+#
+# tiered - 简单阶梯 (按输入 token 分档)
+#   tiers:
+#     - min_tokens: 0
+#       max_tokens: 32000
+#       input_price: x
+#       output_price: y
+#
+# tiered_complex - 复杂阶梯 (按输入+输出组合分档)
+#   complex_tiers:
+#     - input_min: 0
+#       input_max: 32000
+#       output_min: 0
+#       output_max: 200
+#       input_price: x
+#       output_price: y
+#
+# free - 免费
+#
+# =====================================================
 
 models:
-  # ===== OpenAI =====
-  - vendor: OpenAI
-    model: gpt-4o
-    display_name: GPT-4o
-    pricing_type: fixed
-    input_price_per_million: 2.50
-    output_price_per_million: 10.00
-    last_updated: "2024-12-01"
-  
-  - vendor: OpenAI
-    model: gpt-4o-mini
-    display_name: GPT-4o Mini
-    pricing_type: fixed
-    input_price_per_million: 0.15
-    output_price_per_million: 0.60
-  
-  # ===== DeepSeek =====
-  - vendor: DeepSeek
-    model: deepseek-chat
-    display_name: DeepSeek Chat
-    pricing_type: fixed
-    input_price_per_million: 0.14
-    output_price_per_million: 0.28
-    currency: CNY
-    notes: "输入 ¥1/百万, 输出 ¥2/百万"
-  
-  - vendor: DeepSeek
-    model: deepseek-vl2
-    display_name: DeepSeek VL2
-    pricing_type: fixed
-    input_price_per_million: 0.14
-    output_price_per_million: 0.28
-    currency: CNY
-  
-  # ===== OpenRouter =====
-  - vendor: OpenRouter
-    model: anthropic/claude-sonnet-4-20250514
-    display_name: Claude Sonnet 4 (OpenRouter)
-    pricing_type: fixed
-    input_price_per_million: 3.00
-    output_price_per_million: 15.00
-  
-  - vendor: OpenRouter
-    model: google/gemini-2.0-flash-exp:free
-    display_name: Gemini 2.0 Flash (Free)
-    pricing_type: free
-  
-  # ===== Anthropic =====
-  - vendor: Anthropic
-    model: claude-sonnet-4-20250514
-    display_name: Claude Sonnet 4
-    pricing_type: fixed
-    input_price_per_million: 3.00
-    output_price_per_million: 15.00
-  
-  # ===== Google Gemini =====
-  - vendor: Google
-    model: gemini-2.0-flash
-    display_name: Gemini 2.0 Flash
-    pricing_type: tiered
-    tiers:
-      - min_tokens: 0
-        max_tokens: 128000
-        input_price: 0.075
-        output_price: 0.30
-      - min_tokens: 128000
-        max_tokens: null
-        input_price: 0.15
-        output_price: 0.60
-  
-  # ===== 火山方舟 =====
+  # ===== 火山方舟 - DeepSeek V3 =====
+  # 简单阶梯定价：按输入 token 数分档
   - vendor: 火山方舟
-    model: doubao-vision-pro-32k
+    model: deepseek-v3-2-251201
+    display_name: DeepSeek V3 (火山方舟)
+    pricing_type: tiered
+    currency: CNY
+    notes: |
+      输入<=32k: 2.0/M输入, 3.0/M输出
+      32k<输入<=128k: 4.0/M输入, 6.0/M输出
+    tiers:
+      # 基础档 (输入<=32k)
+      - min_tokens: 0
+        max_tokens: 32000
+        input_price: 2.0
+        output_price: 3.0
+      # 高档 (32k-128k)
+      - min_tokens: 32001
+        max_tokens: 128000
+        input_price: 4.0
+        output_price: 6.0
+
+  # ===== 火山方舟 - 豆包 Seed 1.6 =====
+  # 复杂阶梯定价：按输入+输出组合分档
+  - vendor: 火山方舟
+    model: doubao-seed-1-6-251015
+    display_name: 豆包 Seed 1.6
+    pricing_type: tiered_complex
+    currency: CNY
+    notes: |
+      输入<=32k+输出<=200: 0.8/M输入, 2.0/M输出
+      输入<=32k+输出>200: 0.8/M输入, 8.0/M输出
+      32k<输入<=128k: 1.2/M输入, 16.0/M输出
+      输入>128k: 2.4/M输入, 24.0/M输出
+    complex_tiers:
+      # 档位1: 输入<=32k, 输出<=200
+      - input_min: 0
+        input_max: 32000
+        output_min: 0
+        output_max: 200
+        input_price: 0.8
+        output_price: 2.0
+      # 档位2: 输入<=32k, 输出>200
+      - input_min: 0
+        input_max: 32000
+        output_min: 201
+        output_max: null
+        input_price: 0.8
+        output_price: 8.0
+      # 档位3: 32k<输入<=128k
+      - input_min: 32001
+        input_max: 128000
+        output_min: null
+        output_max: null
+        input_price: 1.2
+        output_price: 16.0
+      # 档位4: 输入>128k
+      - input_min: 128001
+        input_max: null
+        output_min: null
+        output_max: null
+        input_price: 2.4
+        output_price: 24.0
+
+  # ===== 火山方舟 - 豆包 Seed 1.6 Lite =====
+  # 复杂阶梯定价：按输入+输出组合分档
+  - vendor: 火山方舟
+    model: doubao-seed-1-6-lite-251015
+    display_name: 豆包 Seed 1.6 Lite
+    pricing_type: tiered_complex
+    currency: CNY
+    notes: |
+      输入<=32k+输出<=200: 0.3/M输入, 0.6/M输出
+      输入<=32k+输出>200: 0.3/M输入, 2.4/M输出
+      32k<输入<=128k: 0.6/M输入, 4.0/M输出
+      输入>128k: 1.2/M输入, 12.0/M输出
+    complex_tiers:
+      # 档位1: 输入<=32k, 输出<=200
+      - input_min: 0
+        input_max: 32000
+        output_min: 0
+        output_max: 200
+        input_price: 0.3
+        output_price: 0.6
+      # 档位2: 输入<=32k, 输出>200
+      - input_min: 0
+        input_max: 32000
+        output_min: 201
+        output_max: null
+        input_price: 0.3
+        output_price: 2.4
+      # 档位3: 32k<输入<=128k
+      - input_min: 32001
+        input_max: 128000
+        output_min: null
+        output_max: null
+        input_price: 0.6
+        output_price: 4.0
+      # 档位4: 输入>128k
+      - input_min: 128001
+        input_max: null
+        output_min: null
+        output_max: null
+        input_price: 1.2
+        output_price: 12.0
+
+  # ===== 火山方舟 - 豆包视觉模型 =====
+  - vendor: 火山方舟
+    model: doubao-1-5-vision-pro-32k-250115
     display_name: 豆包视觉 Pro 32K
     pricing_type: fixed
+    currency: CNY
     input_price_per_million: 0.42
     output_price_per_million: 1.25
-    currency: CNY
-  
-  # ===== 本地部署 =====
-  - vendor: Local
-    model: autoglm-phone-9b
-    display_name: AutoGLM Phone 9B (本地)
-    pricing_type: free

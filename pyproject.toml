@@ -36,6 +36,7 @@ dev = [
 ]
 
 [project.scripts]
+android-phone-agent = "phone_agent.tui.app:main"
 phone-agent = "phone_agent.tui.app:main"
 
 [build-system]

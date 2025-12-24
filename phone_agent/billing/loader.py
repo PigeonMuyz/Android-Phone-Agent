@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import ModelPricing, PriceTier, PricingType
+from .models import ModelPricing, PriceTier, ComplexPriceTier, PricingType
 from .manager import BillingManager
 
 
@@ -23,10 +23,16 @@ def load_pricing_config(config_path: str | Path) -> BillingManager:
         config = yaml.safe_load(f)
 
     for model_config in config.get("models", []):
-        # 处理阶梯定价
+        # 处理简单阶梯定价
         if "tiers" in model_config:
             model_config["tiers"] = [
                 PriceTier(**tier) for tier in model_config["tiers"]
+            ]
+
+        # 处理复杂阶梯定价
+        if "complex_tiers" in model_config:
+            model_config["complex_tiers"] = [
+                ComplexPriceTier(**tier) for tier in model_config["complex_tiers"]
             ]
 
         # 处理 pricing_type
