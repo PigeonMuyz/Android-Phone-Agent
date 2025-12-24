@@ -142,6 +142,10 @@ class SettingsScreen(Screen):
                     with Horizontal(classes="form-row"):
                         yield Static("Google:", classes="form-label")
                         yield Input(placeholder="GOOGLE_API_KEY", id="input-google-key", password=True, classes="form-input")
+                    
+                    with Horizontal(classes="form-row"):
+                        yield Static("ModelScope:", classes="form-label")
+                        yield Input(placeholder="MODELSCOPE_API_KEY", id="input-modelscope-key", password=True, classes="form-input")
 
                 # Profiles Tab
                 with TabPane("📋 Profiles", id="tab-profiles"):
@@ -239,6 +243,7 @@ class SettingsScreen(Screen):
             "input-deepseek-key": "DEEPSEEK_API_KEY",
             "input-anthropic-key": "ANTHROPIC_API_KEY",
             "input-google-key": "GOOGLE_API_KEY",
+            "input-modelscope-key": "MODELSCOPE_API_KEY",
         }
         
         for input_id, env_key in key_mapping.items():
@@ -399,6 +404,7 @@ class SettingsScreen(Screen):
             "DEEPSEEK_API_KEY": self.query_one("#input-deepseek-key", Input).value,
             "ANTHROPIC_API_KEY": self.query_one("#input-anthropic-key", Input).value,
             "GOOGLE_API_KEY": self.query_one("#input-google-key", Input).value,
+            "MODELSCOPE_API_KEY": self.query_one("#input-modelscope-key", Input).value,
         }
         
         updated_keys = set()
