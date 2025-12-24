@@ -137,7 +137,7 @@ class PhoneAgentApp(App):
 
         with Container(id="main-panel"):
             yield Static("📋 任务日志", classes="section-title")
-            yield RichLog(id="log-panel", highlight=True, markup=True)
+            yield RichLog(id="log-panel", highlight=True, markup=True, wrap=True)
             
             with Horizontal(id="input-panel"):
                 yield Input(
@@ -145,6 +145,7 @@ class PhoneAgentApp(App):
                     id="task-input",
                 )
                 yield Button("执行", id="submit-btn", variant="primary")
+                yield Button("暂停", id="pause-btn", variant="warning", disabled=True)
                 yield Button("取消", id="cancel-btn", variant="error", disabled=True)
 
         yield Footer()
@@ -226,6 +227,8 @@ class PhoneAgentApp(App):
             await self._execute_task()
         elif event.button.id == "cancel-btn":
             await self.action_cancel_task()
+        elif event.button.id == "pause-btn":
+            await self.action_toggle_pause()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """输入提交事件"""
@@ -265,6 +268,8 @@ class PhoneAgentApp(App):
         # 设置按钮状态
         submit_btn.disabled = True
         cancel_btn.disabled = False
+        pause_btn = self.query_one("#pause-btn", Button)
+        pause_btn.disabled = False
         self._task_running = True
 
         # 使用 Textual 的 worker 在后台执行
@@ -429,8 +434,11 @@ class PhoneAgentApp(App):
         """重置按钮状态"""
         submit_btn = self.query_one("#submit-btn", Button)
         cancel_btn = self.query_one("#cancel-btn", Button)
+        pause_btn = self.query_one("#pause-btn", Button)
         submit_btn.disabled = False
         cancel_btn.disabled = True
+        pause_btn.disabled = True
+        pause_btn.label = "暂停"
         self._task_running = False
         self._current_agent = None
 
@@ -440,6 +448,23 @@ class PhoneAgentApp(App):
             log = self.query_one("#log-panel", RichLog)
             log.write("[yellow]⏹️ 正在取消任务...[/yellow]")
             self._current_agent.cancel()
+
+    async def action_toggle_pause(self) -> None:
+        """暂停/恢复任务"""
+        if not self._current_agent or not self._task_running:
+            return
+        
+        log = self.query_one("#log-panel", RichLog)
+        pause_btn = self.query_one("#pause-btn", Button)
+        
+        if self._current_agent.is_paused():
+            self._current_agent.resume()
+            pause_btn.label = "暂停"
+            log.write("[green]▶️ 任务已恢复[/green]")
+        else:
+            self._current_agent.pause()
+            pause_btn.label = "继续"
+            log.write("[yellow]⏸️ 任务已暂停 - 可手动操作手机，完成后点击「继续」[/yellow]")
 
 
 def main() -> None:

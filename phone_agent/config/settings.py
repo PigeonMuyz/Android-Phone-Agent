@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     action_delay: float = Field(default=3.0, description="动作执行后等待 UI 响应的时间（秒）")
     pause_on_action: bool = Field(default=False, description="每步后暂停等待用户确认")
     screenshot_scale: float = Field(default=0.5, description="截图缩放比例")
+    summarize_interval: int = Field(default=5, description="每 N 步执行一次历史摘要（0=不摘要）")
 
 
 @lru_cache

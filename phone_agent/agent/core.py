@@ -37,6 +37,10 @@ class AgentConfig(BaseModel):
     enable_billing: bool = Field(default=True, description="启用计费")
     pause_on_action: bool = Field(default=False, description="每步后暂停等待用户确认")
     enable_ocr: bool = Field(default=True, description="启用 OCR 辅助（检测键盘状态等）")
+    
+    # 成本优化：历史摘要
+    summarize_interval: int = Field(default=5, description="每 N 步执行一次历史摘要（0=不摘要）")
+    keep_system_prompt: bool = Field(default=True, description="始终保留系统 Prompt")
 
 
 class StepResult(BaseModel):
@@ -93,12 +97,26 @@ class PhoneAgent:
         self._step_count = 0
         self._total_cost = 0.0
         self._cancelled = False
+        self._paused = False
         if self.billing_manager:
             self.billing_manager.reset()
 
     def cancel(self) -> None:
         """取消任务"""
         self._cancelled = True
+        self._paused = False
+
+    def pause(self) -> None:
+        """暂停任务"""
+        self._paused = True
+
+    def resume(self) -> None:
+        """恢复任务"""
+        self._paused = False
+
+    def is_paused(self) -> bool:
+        """检查是否暂停"""
+        return self._paused
 
     def run(self, task: str) -> str:
         """
@@ -138,6 +156,14 @@ class PhoneAgent:
                 self._print_billing_summary()
                 return "任务已取消"
 
+            # 检查是否暂停（等待恢复）
+            while self._paused and not self._cancelled:
+                time.sleep(0.5)
+            
+            if self._cancelled:
+                self._print_billing_summary()
+                return "任务已取消"
+
             result = self._execute_step()
 
             self._total_cost += result.step_cost
@@ -152,6 +178,12 @@ class PhoneAgent:
             if result.finished:
                 self._print_billing_summary()
                 return result.message or "任务完成"
+
+            # 历史摘要（每 N 步）
+            if (self.config.summarize_interval > 0 and 
+                self._step_count > 0 and 
+                self._step_count % self.config.summarize_interval == 0):
+                self._summarize_history()
 
             time.sleep(self.config.step_delay)
 
@@ -303,3 +335,56 @@ class PhoneAgent:
         print(f"   总成本: ${summary.total_cost:.6f} (≈ ¥{summary.total_cost * 7.2:.4f})")
         print(f"   步骤数: {summary.step_count}")
         print(f"{'=' * 50}\n")
+
+    def _summarize_history(self) -> None:
+        """将历史对话压缩为摘要以节省 token"""
+        if len(self._messages) <= 3:  # 至少需要 system + user + 一些历史
+            return
+
+        if self.config.verbose:
+            print("📝 正在压缩历史上下文...")
+
+        # 保留系统 Prompt 和最后两条消息
+        system_msg = self._messages[0] if self._messages[0]["role"] == "system" else None
+        recent_msgs = self._messages[-2:]  # 保留最近 2 条
+
+        # 提取中间的历史消息
+        if system_msg:
+            history_msgs = self._messages[1:-2]
+        else:
+            history_msgs = self._messages[:-2]
+
+        if not history_msgs:
+            return
+
+        # 简单的摘要：提取每条消息的关键信息
+        summary_lines = []
+        for msg in history_msgs:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            
+            if role == "assistant":
+                # 尝试提取 action 和 thinking
+                if "action" in content.lower():
+                    # 只保留关键部分
+                    summary_lines.append(f"- 执行了操作")
+                else:
+                    summary_lines.append(f"- AI: {content[:50]}...")
+            elif role == "user":
+                if "屏幕分析" not in content:
+                    summary_lines.append(f"- 用户/系统: {content[:30]}...")
+
+        # 构建摘要消息
+        summary_content = f"""[历史摘要 - 第1-{self._step_count - len(recent_msgs)//2}步]
+{chr(10).join(summary_lines[:10])}
+(已压缩 {len(history_msgs)} 条历史消息以节省 token)"""
+
+        # 重建消息列表
+        self._messages = []
+        if system_msg:
+            self._messages.append(system_msg)
+        self._messages.append({"role": "user", "content": summary_content})
+        self._messages.extend(recent_msgs)
+
+        if self.config.verbose:
+            print(f"✅ 历史已压缩: {len(history_msgs)} 条 → 1 条摘要")
