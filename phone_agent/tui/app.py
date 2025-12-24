@@ -121,6 +121,12 @@ class PhoneAgentApp(App):
         self._selected_device: DeviceInfo | None = None
         self._current_agent = None  # 当前运行的 Agent
         self._task_running = False
+        
+        # 任务面板
+        self._show_current_task = True  # True=当前任务, False=历史
+        self._current_task_info = {"name": "", "cost": 0.0, "time": 0}
+        self._task_history: list[dict] = []
+        self._task_start_time: float = 0
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -134,6 +140,14 @@ class PhoneAgentApp(App):
                 id="profile-select",
                 prompt="选择 Profile",
             )
+            
+            # 任务状态面板
+            with Vertical(id="task-panel"):
+                with Horizontal(id="task-panel-header"):
+                    yield Static("📊 ", id="task-panel-icon")
+                    yield Button("当前任务", id="show-current-btn", variant="primary")
+                    yield Button("历史", id="show-history-btn", variant="default")
+                yield Static("", id="task-status-content", classes="task-content")
 
         with Container(id="main-panel"):
             yield Static("📋 任务日志", classes="section-title")
@@ -229,6 +243,14 @@ class PhoneAgentApp(App):
             await self.action_cancel_task()
         elif event.button.id == "pause-btn":
             await self.action_toggle_pause()
+        elif event.button.id == "show-current-btn":
+            self._show_current_task = True
+            self._update_task_panel_buttons()
+            self._update_task_panel()
+        elif event.button.id == "show-history-btn":
+            self._show_current_task = False
+            self._update_task_panel_buttons()
+            self._update_task_panel()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """输入提交事件"""
@@ -271,6 +293,12 @@ class PhoneAgentApp(App):
         pause_btn = self.query_one("#pause-btn", Button)
         pause_btn.disabled = False
         self._task_running = True
+
+        # 记录任务信息
+        import time as time_module
+        self._task_start_time = time_module.time()
+        self._current_task_info = {"name": task, "cost": 0.0, "time": 0}
+        self._update_task_panel()
 
         # 使用 Textual 的 worker 在后台执行
         self.run_worker(
@@ -429,6 +457,9 @@ class PhoneAgentApp(App):
 
         if result.step_cost > 0:
             log.write(f"[dim]💰 成本: ¥{result.step_cost:.4f}[/dim]")
+            # 更新任务面板成本
+            self._current_task_info["cost"] += result.step_cost
+            self._update_task_panel()
 
     def _reset_buttons(self) -> None:
         """重置按钮状态"""
@@ -439,8 +470,18 @@ class PhoneAgentApp(App):
         cancel_btn.disabled = True
         pause_btn.disabled = True
         pause_btn.label = "暂停"
+        
+        # 保存任务到历史
+        if self._current_task_info.get("name"):
+            self._task_history.append({
+                "name": self._current_task_info["name"],
+                "cost": self._current_task_info["cost"],
+            })
+        
         self._task_running = False
         self._current_agent = None
+        self._current_task_info = {"name": "", "cost": 0.0, "time": 0}
+        self._update_task_panel()
 
     async def action_cancel_task(self) -> None:
         """取消当前任务"""
@@ -465,6 +506,49 @@ class PhoneAgentApp(App):
             self._current_agent.pause()
             pause_btn.label = "继续"
             log.write("[yellow]⏸️ 任务已暂停 - 可手动操作手机，完成后点击「继续」[/yellow]")
+
+    def _update_task_panel_buttons(self) -> None:
+        """更新任务面板按钮样式"""
+        current_btn = self.query_one("#show-current-btn", Button)
+        history_btn = self.query_one("#show-history-btn", Button)
+        
+        if self._show_current_task:
+            current_btn.variant = "primary"
+            history_btn.variant = "default"
+        else:
+            current_btn.variant = "default"
+            history_btn.variant = "primary"
+
+    def _update_task_panel(self) -> None:
+        """更新任务面板内容"""
+        content = self.query_one("#task-status-content", Static)
+        
+        if self._show_current_task:
+            # 显示当前任务
+            if self._task_running and self._current_task_info["name"]:
+                import time as time_module
+                elapsed = int(time_module.time() - self._task_start_time)
+                mins, secs = divmod(elapsed, 60)
+                
+                status = "⏸️ 暂停" if (self._current_agent and self._current_agent.is_paused()) else "▶️ 执行中"
+                
+                text = f"""🎯 {self._current_task_info['name'][:20]}...
+{status}
+⏱️ {mins}m {secs}s
+💰 ¥{self._current_task_info['cost']:.4f}"""
+            else:
+                text = "[dim]无正在执行的任务[/dim]"
+        else:
+            # 显示历史任务
+            if self._task_history:
+                lines = []
+                for i, task in enumerate(self._task_history[-5:]):  # 最近5个
+                    lines.append(f"{i+1}. {task['name'][:15]}.. ¥{task['cost']:.4f}")
+                text = "\n".join(lines)
+            else:
+                text = "[dim]暂无历史记录[/dim]"
+        
+        content.update(text)
 
 
 def main() -> None:
