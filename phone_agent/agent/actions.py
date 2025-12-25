@@ -16,8 +16,11 @@ class ActionType(str, Enum):
 
     TAP = "Tap"
     SWIPE = "Swipe"
+    DRAG = "Drag"
     TYPE = "Type"
+    TAP_AND_TYPE = "TapAndType"
     LAUNCH = "Launch"
+    KEY_PRESS = "KeyPress"
     BACK = "Back"
     HOME = "Home"
     WAIT = "Wait"
@@ -44,8 +47,11 @@ class ActionHandler:
         self._handlers: dict[ActionType, Callable] = {
             ActionType.TAP: self._handle_tap,
             ActionType.SWIPE: self._handle_swipe,
+            ActionType.DRAG: self._handle_drag,
             ActionType.TYPE: self._handle_type,
+            ActionType.TAP_AND_TYPE: self._handle_tap_and_type,
             ActionType.LAUNCH: self._handle_launch,
+            ActionType.KEY_PRESS: self._handle_key_press,
             ActionType.BACK: self._handle_back,
             ActionType.HOME: self._handle_home,
             ActionType.WAIT: self._handle_wait,
@@ -148,6 +154,19 @@ class ActionHandler:
 
         return ActionResult(False, False, "滑动失败")
 
+    def _handle_drag(self, params: dict) -> ActionResult:
+        """处理拖拽"""
+        start = params.get("start", [500, 500])
+        end = params.get("end", [500, 500])
+        duration = params.get("duration", 1000)
+        
+        x1, y1 = self._get_coords(start)
+        x2, y2 = self._get_coords(end)
+        
+        if self.device.swipe(x1, y1, x2, y2, duration):
+            return ActionResult(True, False, f"拖拽 ({x1},{y1}) -> ({x2},{y2}) {duration}ms")
+        return ActionResult(False, False, "拖拽失败")
+
     def _handle_type(self, params: dict) -> ActionResult:
         """处理文本输入"""
         text = params.get("text", "")
@@ -164,15 +183,125 @@ class ActionHandler:
 
         return ActionResult(False, False, "输入失败")
 
+    def _handle_tap_and_type(self, params: dict) -> ActionResult:
+        """处理点击并输入（组合动作）"""
+        element = params.get("element", [500, 500])
+        text = params.get("text", "")
+        clear = params.get("clear", False)
+        
+        if not text:
+            return ActionResult(False, False, "缺少输入文本")
+        
+        x, y = self._get_coords(element)
+        
+        # 1. 先点击输入框
+        if not self.device.tap(x, y):
+            return ActionResult(False, False, "点击输入框失败")
+        
+        import time
+        time.sleep(0.5)  # 等待输入框聚焦
+        
+        # 2. 可选：清空现有内容
+        if clear:
+            # 全选并删除
+            self.device.press_key(123)  # KEYCODE_MOVE_END
+            time.sleep(0.1)
+            # 发送多个删除键
+            for _ in range(50):  # 删除最多 50 个字符
+                self.device.press_key(67)  # KEYCODE_DEL
+        
+        # 3. 输入文本
+        if self.device.input_text_adbime(text) or self.device.input_text(text):
+            return ActionResult(True, False, f"点击({x},{y})并输入: {text[:20]}...")
+        
+        return ActionResult(False, False, "输入文本失败")
+
     def _handle_launch(self, params: dict) -> ActionResult:
         """处理启动应用"""
+        # 优先使用 app_name（应用中文名）
+        app_name = params.get("app_name", "")
         package = params.get("package", "")
+        
+        if app_name:
+            # 根据应用名查找包名
+            package = self._find_package_by_name(app_name)
+            if not package:
+                return ActionResult(False, False, f"找不到应用: {app_name}")
+        
         if not package:
-            return ActionResult(False, False, "缺少 package 参数")
+            return ActionResult(False, False, "缺少 app_name 或 package 参数")
 
         if self.device.launch_app(package):
-            return ActionResult(True, False, f"启动: {package}")
-        return ActionResult(False, False, f"启动失败: {package}")
+            display = f"{app_name} ({package})" if app_name else package
+            return ActionResult(True, False, f"启动: {display}")
+        display = f"{app_name} ({package})" if app_name else package
+        return ActionResult(False, False, f"启动失败: {display}")
+
+    def _find_package_by_name(self, app_name: str) -> str | None:
+        """根据应用名称查找包名"""
+        # 常见应用映射
+        app_map = {
+            "微信": "com.tencent.mm",
+            "QQ": "com.tencent.mobileqq",
+            "淘宝": "com.taobao.taobao",
+            "京东": "com.jingdong.app.mall",
+            "拼多多": "com.xunmeng.pinduoduo",
+            "抖音": "com.ss.android.ugc.aweme",
+            "快手": "com.smile.gifmaker",
+            "美团": "com.sankuai.meituan",
+            "饿了么": "com.ele.me",
+            "支付宝": "com.eg.android.AlipayGphone",
+            "高德地图": "com.autonavi.minimap",
+            "百度地图": "com.baidu.BaiduMap",
+            "滴滴": "com.sdu.didi.psnger",
+            "网易云音乐": "com.netease.cloudmusic",
+            "QQ音乐": "com.tencent.qqmusic",
+            "爱奇艺": "com.qiyi.video",
+            "腾讯视频": "com.tencent.qqlive",
+            "优酷": "com.youku.phone",
+            "哔哩哔哩": "tv.danmaku.bili",
+            "B站": "tv.danmaku.bili",
+            "小红书": "com.xingin.xhs",
+            "知乎": "com.zhihu.android",
+            "微博": "com.sina.weibo",
+            "今日头条": "com.ss.android.article.news",
+            "携程": "ctrip.android.view",
+            "飞猪": "com.taobao.trip",
+            "12306": "com.MobileTicket",
+            "设置": "com.android.settings",
+            "相机": "com.android.camera",
+            "相册": "com.android.gallery3d",
+            "日历": "com.android.calendar",
+            "时钟": "com.android.deskclock",
+            "计算器": "com.android.calculator2",
+            "文件管理": "com.android.fileexplorer",
+            "应用商店": "com.android.vending",
+        }
+        return app_map.get(app_name)
+
+    def _handle_key_press(self, params: dict) -> ActionResult:
+        """处理物理按键"""
+        key = params.get("key", "")
+        if not key:
+            return ActionResult(False, False, "缺少 key 参数")
+        
+        # 按键映射
+        key_map = {
+            "enter": 66,      # KEYCODE_ENTER
+            "delete": 67,     # KEYCODE_DEL
+            "volume_up": 24,  # KEYCODE_VOLUME_UP
+            "volume_down": 25,  # KEYCODE_VOLUME_DOWN
+            "app_switch": 187,  # KEYCODE_APP_SWITCH
+            "snapshot": 120,  # KEYCODE_SYSRQ (screenshot)
+        }
+        
+        keycode = key_map.get(key.lower())
+        if keycode is None:
+            return ActionResult(False, False, f"未知按键: {key}")
+        
+        if self.device.press_key(keycode):
+            return ActionResult(True, False, f"按键: {key}")
+        return ActionResult(False, False, f"按键失败: {key}")
 
     def _handle_back(self, params: dict) -> ActionResult:
         """处理返回"""

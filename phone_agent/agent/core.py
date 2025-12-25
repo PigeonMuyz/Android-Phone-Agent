@@ -384,6 +384,11 @@ class PhoneAgent:
             if action_result.message:
                 feedback += f": {action_result.message}"
             
+            # 添加当前活跃应用信息
+            current_app = self.device.get_current_app()
+            if current_app:
+                feedback += f"\n[当前应用: {current_app}]"
+            
             # 添加任务进度信息
             if self._task_plan.tasks:
                 completed = sum(1 for t in self._task_plan.tasks if t.status == "completed")

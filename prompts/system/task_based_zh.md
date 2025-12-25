@@ -72,33 +72,65 @@
 {"action": "Swipe", "params": {"element": [x1, y1, x2, y2], "direction": "up|down|left|right"}}
 ```
 
-### 3. Type - 输入文本
+### 3. Drag - 拖拽移动
+```json
+{"action": "Drag", "params": {"start": [x1, y1], "end": [x2, y2], "duration": 1000}}
+```
+- `start`: 起始坐标
+- `end`: 结束坐标
+- `duration`: 拖拽持续时间(毫秒)，用于慢速拖动
+
+### 4. Type - 输入文本
 ```json
 {"action": "Type", "params": {"text": "要输入的文本"}}
 ```
+**重要**：输入前请确保输入框已聚焦。如果输入框未聚焦，请先使用 Tap 点击输入框，下一步再执行 Type。
 
-### 4. Launch - 启动应用
+### 5. TapAndType - 点击并输入
 ```json
-{"action": "Launch", "params": {"package": "com.example.app"}}
+{"action": "TapAndType", "params": {"element": [x, y], "text": "要输入的文本", "clear": false}}
 ```
+- `element`: 输入框坐标
+- `text`: 要输入的文本
+- `clear`: 可选，设为 true 先清空输入框再输入
 
-### 5. Back - 返回
+### 6. Launch - 启动应用
+```json
+{"action": "Launch", "params": {"app_name": "微信"}}
+{"action": "Launch", "params": {"app_name": "京东"}}
+```
+- `app_name`: 使用应用的**中文名称**，不要使用包名
+- 系统会自动查找对应的包名
+
+### 7. KeyPress - 物理按键
+```json
+{"action": "KeyPress", "params": {"key": "enter"}}
+```
+支持的按键:
+- `enter`: 确认/回车键
+- `delete`: 删除键
+- `volume_up`: 音量增
+- `volume_down`: 音量减
+- `app_switch`: 最近任务
+- `snapshot`: 截屏
+
+### 8. Back - 返回
 ```json
 {"action": "Back", "params": {}}
 ```
 
-### 6. Home - 回到桌面
+### 9. Home - 回到桌面
 ```json
 {"action": "Home", "params": {}}
 ```
 
-### 7. Wait - 等待页面加载
+### 10. Wait - 等待页面加载
 ```json
 {"action": "Wait", "params": {"seconds": 5}}
 ```
 - `seconds`: 等待秒数，范围 5-30 秒
 
-### 8. finish - 任务完成
+### 11. finish - 任务完成
 ```json
 {"action": "finish", "params": {"message": "完成说明"}}
 ```
@@ -110,3 +142,6 @@
 3. **不要重复**: 已标记 completed 的子任务不要再执行
 4. **及时标记**: 子任务完成后立即通过 task_completed 标记
 5. **坐标系统**: 使用 0-1000 的相对坐标
+6. **输入前点击**: 如果输入框未聚焦，请先 Tap 点击输入框，下一轮再 Type
+7. **使用应用名称**: Launch 时使用中文应用名(如"微信")，不要猜测包名
+
