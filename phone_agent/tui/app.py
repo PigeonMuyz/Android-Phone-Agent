@@ -407,8 +407,11 @@ class PhoneAgentApp(App):
             self._reset_buttons()
             return
 
-        # 加载 Prompt 管理器
-        prompt_manager = PromptManager("prompts")
+        # 加载 Prompt 管理器（使用项目根目录下的 prompts 文件夹）
+        import os
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        prompts_dir = os.path.join(project_root, "prompts")
+        prompt_manager = PromptManager(prompts_dir)
         prompt_manager.load()
 
         # 加载计费管理器

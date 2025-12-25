@@ -31,7 +31,7 @@ class AgentConfig(BaseModel):
     max_steps: int = Field(default=50, description="最大步数")
     step_delay: float = Field(default=1.0, description="每步后延迟（秒）")
     action_delay: float = Field(default=3.0, description="动作执行后等待时间（秒）- 等待UI响应")
-    screenshot_scale: float = Field(default=0.5, description="截图缩放比例")
+    screenshot_scale: float = Field(default=1.0, description="截图缩放比例")
     language: str = Field(default="zh", description="语言")
     verbose: bool = Field(default=True, description="详细输出")
     enable_billing: bool = Field(default=True, description="启用计费")
@@ -336,8 +336,35 @@ class PhoneAgent:
                     message=f"规划了 {len(self._task_plan.tasks)} 个子任务",
                 ))
         else:
-            # 5. 执行动作
+            # 5. 执行前验证：检测屏幕是否已变化
+            screen_changed = False
+            if action and not action.startswith('{"action": "Wait"'):
+                try:
+                    # 重新截图
+                    verify_screenshot = self.device.screenshot(scale=self.config.screenshot_scale)
+                    # 简单对比截图大小差异（快速检测）
+                    if abs(len(verify_screenshot) - len(screenshot)) > len(screenshot) * 0.1:
+                        # 截图大小变化超过 10%，认为屏幕已变化
+                        screen_changed = True
+                except Exception:
+                    pass
+            
+            if screen_changed:
+                # 标记屏幕有动态变化，但仍执行动作
+                if self.on_progress_callback:
+                    self.on_progress_callback(ProgressUpdate(
+                        step=self._step_count,
+                        phase="action",
+                        action="Notice",
+                        message="检测到屏幕有动态变化（动画/广告），继续执行动作",
+                    ))
+            
+            # 5. 执行动作（无论是否变化都执行）
             action_result = self.action_handler.execute(action)
+            
+            # 如果检测到变化，在结果中添加提示
+            if screen_changed and action_result.message:
+                action_result.message += "（注意：执行时屏幕有动态变化）"
         
         # 5.5 发送动作结果进度
         if self.on_progress_callback:

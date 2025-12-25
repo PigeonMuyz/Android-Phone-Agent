@@ -136,6 +136,25 @@ class PromptManager:
             return self._app_prompts.get(app_name)
         return None
 
+    def _detect_app_from_task(self, task: str) -> AppPromptConfig | None:
+        """从任务描述中检测应用名/别名"""
+        if not task:
+            return None
+        
+        task_lower = task.lower()
+        
+        # 遍历所有已注册的应用名和别名
+        for app_key, app_config in self._app_prompts.items():
+            # 检查应用名
+            if app_config.name.lower() in task_lower:
+                return app_config
+            # 检查别名
+            for alias in app_config.aliases:
+                if alias.lower() in task_lower:
+                    return app_config
+        
+        return None
+
     def build_system_prompt(
         self,
         context: PromptContext,
@@ -161,10 +180,20 @@ class PromptManager:
             parts.append(default_prompt)
 
         # 2. App 专用 Prompt
+        app_config = None
+        
+        # 2.1 先尝试通过当前应用包名匹配
         if context.current_app:
             app_config = self.get_app_config_by_package(context.current_app)
-            if app_config and app_config.system_prompt:
-                parts.append(f"\n## {app_config.name} 操作指南\n\n{app_config.system_prompt}")
+        
+        # 2.2 如果没匹配到，尝试从任务描述中匹配应用名/别名
+        if not app_config:
+            app_config = self._detect_app_from_task(context.task)
+        
+        if app_config and app_config.system_prompt:
+            parts.append(f"\n## {app_config.name} 操作指南\n\n{app_config.system_prompt}")
+            # 调试输出
+            print(f"📄 已加载专属提示词: {app_config.name}")
 
         # 3. 功能描述词
         feature = context.detected_feature or self.detect_feature(context.task)

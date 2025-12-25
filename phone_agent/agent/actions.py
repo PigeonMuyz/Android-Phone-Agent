@@ -97,10 +97,10 @@ class ActionHandler:
         将相对坐标 (0-1000) 转换为绝对像素
 
         Args:
-            element: [x, y] 相对坐标
+            element: [x, y] 相对坐标 (0-1000)
 
         Returns:
-            (abs_x, abs_y) 绝对坐标
+            (abs_x, abs_y) 绝对像素坐标
         """
         width, height = self.device.screen_size
         x = int(element[0] / 1000 * width)
@@ -129,7 +129,7 @@ class ActionHandler:
         direction = params.get("direction", "up")
 
         if element and len(element) >= 4:
-            # 使用 [x1, y1, x2, y2] 坐标
+            # 使用 [x1, y1, x2, y2] 相对坐标 (0-1000)
             width, height = self.device.screen_size
             x1 = int(element[0] / 1000 * width)
             y1 = int(element[1] / 1000 * height)
@@ -239,7 +239,7 @@ class ActionHandler:
 
     def _find_package_by_name(self, app_name: str) -> str | None:
         """根据应用名称查找包名"""
-        # 常见应用映射
+        # 1. 先查静态映射表
         app_map = {
             "微信": "com.tencent.mm",
             "QQ": "com.tencent.mobileqq",
@@ -277,7 +277,67 @@ class ActionHandler:
             "文件管理": "com.android.fileexplorer",
             "应用商店": "com.android.vending",
         }
-        return app_map.get(app_name)
+        
+        if app_name in app_map:
+            return app_map[app_name]
+        
+        # 2. 动态查询设备安装的应用
+        return self._search_package_on_device(app_name)
+    
+    def _search_package_on_device(self, app_name: str) -> str | None:
+        """在设备上搜索应用包名"""
+        try:
+            # 获取所有已安装应用的包名和标签
+            # 使用 pm list packages -3 获取第三方应用
+            output = self.device.device.shell("pm list packages -3")
+            
+            # 解析包名列表
+            packages = []
+            for line in output.strip().split("\n"):
+                if line.startswith("package:"):
+                    pkg = line.replace("package:", "").strip()
+                    packages.append(pkg)
+            
+            # 尝试关键词匹配
+            # 将中文应用名转为可能的拼音/关键词
+            keywords = self._extract_keywords(app_name)
+            
+            for pkg in packages:
+                pkg_lower = pkg.lower()
+                for keyword in keywords:
+                    if keyword.lower() in pkg_lower:
+                        return pkg
+            
+            return None
+        except Exception:
+            return None
+    
+    def _extract_keywords(self, app_name: str) -> list[str]:
+        """从应用名提取可能的匹配关键词"""
+        keywords = [app_name]
+        
+        # 常见游戏/应用的关键词映射
+        keyword_map = {
+            "剑网3": ["jx3", "jianwang", "seasun"],
+            "剑网3无界": ["jx3", "jianwang", "seasun", "wujie"],
+            "王者荣耀": ["sgame", "honor", "kings"],
+            "原神": ["genshin", "mihoyo"],
+            "崩坏": ["honkai", "mihoyo", "bh3"],
+            "阴阳师": ["onmyoji", "netease"],
+            "明日方舟": ["arknights", "hypergryph"],
+            "和平精英": ["pubg", "tencent", "peacekeeper"],
+            "英雄联盟": ["lol", "league", "tencent"],
+            "穿越火线": ["crossfire", "cf"],
+        }
+        
+        for name, kws in keyword_map.items():
+            if name in app_name:
+                keywords.extend(kws)
+        
+        # 添加拼音首字母（简单处理）
+        # 例如："剑网3无界" 的部分可能是 jw3
+        
+        return keywords
 
     def _handle_key_press(self, params: dict) -> ActionResult:
         """处理物理按键"""

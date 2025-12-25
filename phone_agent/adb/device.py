@@ -48,23 +48,58 @@ class ADBDevice:
 
     @property
     def screen_size(self) -> tuple[int, int]:
-        """获取屏幕尺寸 (width, height)"""
-        if self._screen_size is None:
-            self._screen_size = self._get_screen_size()
-        return self._screen_size
+        """获取屏幕尺寸 (width, height) - 每次实时获取以支持横竖屏切换"""
+        return self._get_screen_size()
 
     def _get_screen_size(self) -> tuple[int, int]:
-        """从设备获取屏幕尺寸"""
+        """从设备获取当前屏幕尺寸（考虑屏幕旋转）"""
         try:
+            # 方法1: 使用 dumpsys display 获取当前显示尺寸（考虑旋转）
+            output = self.device.shell("dumpsys display | grep -E 'mCurrentDisplayRect|DisplayDeviceInfo'")
+            
+            # 解析 mCurrentDisplayRect
+            import re
+            rect_match = re.search(r'mCurrentDisplayRect=Rect\(0, 0 - (\d+), (\d+)\)', output)
+            if rect_match:
+                w, h = int(rect_match.group(1)), int(rect_match.group(2))
+                return w, h
+            
+            # 方法2: 使用 wm size（可能不考虑旋转）
             output = self.device.shell("wm size").strip()
+            
+            if "Override size:" in output:
+                override_line = output.split("Override size:")[-1].split("\n")[0].strip()
+                if "x" in override_line:
+                    w, h = override_line.split("x")
+                    # 检查旋转状态
+                    rotation = self._get_rotation()
+                    if rotation in [1, 3]:  # 横屏
+                        return int(h), int(w)  # 交换宽高
+                    return int(w), int(h)
+            
             if "Physical size:" in output:
-                size_str = output.split("Physical size:")[-1].strip()
+                size_str = output.split("Physical size:")[-1].split("\n")[0].strip()
                 if "x" in size_str:
                     w, h = size_str.split("x")
+                    rotation = self._get_rotation()
+                    if rotation in [1, 3]:  # 横屏
+                        return int(h), int(w)
                     return int(w), int(h)
         except Exception:
             pass
         return 1080, 1920
+
+    def _get_rotation(self) -> int:
+        """获取屏幕旋转状态: 0=竖屏, 1=横屏左, 2=竖屏倒, 3=横屏右"""
+        try:
+            output = self.device.shell("dumpsys input | grep 'SurfaceOrientation'")
+            import re
+            match = re.search(r'SurfaceOrientation:\s*(\d)', output)
+            if match:
+                return int(match.group(1))
+        except Exception:
+            pass
+        return 0
 
     def screenshot(self, scale: float = 1.0) -> bytes:
         """
