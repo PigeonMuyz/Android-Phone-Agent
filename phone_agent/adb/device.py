@@ -101,15 +101,16 @@ class ADBDevice:
             pass
         return 0
 
-    def screenshot(self, scale: float = 1.0) -> bytes:
+    def screenshot(self, scale: float = 1.0, quality: int = 80) -> bytes:
         """
         截取屏幕
         
         Args:
             scale: 缩放比例 (0.0-1.0)
+            quality: JPEG 质量 (1-100)，默认 80
             
         Returns:
-            PNG 图像数据
+            JPEG 图像数据
         """
         # adbutils 的 screenshot() 返回 PIL Image 对象
         img = self.device.screenshot()
@@ -119,9 +120,12 @@ class ADBDevice:
             new_size = (int(img.width * scale), int(img.height * scale))
             img = img.resize(new_size, Image.Resampling.LANCZOS)
         
-        # 转换为 bytes
+        # 转换为 JPEG bytes（比 PNG 小很多）
         buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
+        # 确保是 RGB 模式（JPEG 不支持 RGBA）
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
+        img.save(buffer, format="JPEG", quality=quality, optimize=True)
         return buffer.getvalue()
 
     def screenshot_to_file(self, path: str | Path, scale: float = 1.0) -> Path:
